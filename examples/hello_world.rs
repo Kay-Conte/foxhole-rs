@@ -1,31 +1,21 @@
-use turnip_http::{systems::{Get, Resolve, ResolveGuard, DynSystem}, routing::Node, framework::Framework};
+use turnip_http::{
+    framework::run,
+    routing::Node,
+    systems::Get, sys,
+};
 
-pub struct User {
-    id: i32,
-    permissions: u8,
+
+fn get(_get: Get) -> u16 {
+    println!("Got request");
+
+    200
 }
 
-impl Resolve for User {
-    type Output = ResolveGuard<Self>;
+fn main() {
+    let router = Node::empty().route(
+        "hello_world", 
+        Node::new(sys![get]) 
+    );
 
-    fn resolve(ctx: &mut turnip_http::framework::Request) -> Self::Output {
-        ResolveGuard::Value(User {
-            id: 123,
-            permissions: 255,
-        })
-    }
-}
-
-fn get_user(_get: Get, user: User) {
-    
-}
-
-fn post_user(_post: Post, _user: User) {
-    
-}
-
-fn main() { 
-    let router = Node::new(vec![]).insert("user", Node::new(vec![(get_user as fn(_, _)).into(), (post_user as fn(_)).into()]));
-
-    let framework = Framework::new();
+    run("0.0.0.0:5000", router);
 }

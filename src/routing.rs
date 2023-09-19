@@ -15,9 +15,21 @@ impl Node {
         }
     }
 
-    pub fn insert(mut self, path: impl Into<String>, node: Node) -> Self {
+    pub fn empty() -> Self {
+        Node::new(vec![])
+    }
+
+    pub fn route(mut self, path: impl Into<String>, node: Node) -> Self {
         self.children.insert(path.into(), node);
 
         self
+    }
+
+    pub fn systems(&self) -> &[DynSystem] {
+        &self.systems
+    }
+
+    pub fn get_child<'a, 'b>(&'a self, path: &'b str) -> Option<&'a Node> {
+        self.children.get(path)
     }
 }
