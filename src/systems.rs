@@ -1,6 +1,6 @@
 use http::{Method, Response, Version};
 
-use crate::framework::Context;
+use crate::thread_pool::Context;
 
 pub type RawResponse = Response<Vec<u8>>;
 

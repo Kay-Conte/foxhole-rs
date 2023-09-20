@@ -1,107 +1,33 @@
 use std::{
-    io::{Read, Write},
-    net::{TcpListener, TcpStream, ToSocketAddrs},
-    str::Split,
-    thread,
+    net::{TcpListener, ToSocketAddrs},
+    sync::Arc,
 };
 
-use http::Request;
+use crate::{
+    routing::Route,
+    thread_pool::{Task, ThreadPool},
+};
 
-use crate::{http_utils::{RequestFromBytes, ResponseToBytes}, routing::Route, systems::RawResponse};
-
-struct InternalContext<'a> {
-    stream: TcpStream,
-    router: &'a Route,
-}
-
-pub struct Context<'a, 'b> {
-    internal: InternalContext<'a>,
-    pub request: Request<String>,
-    pub path_iter: Split<'b, &'static str>,
-}
-
-pub fn run<A>(address: A, root: Route)
+pub fn run<A>(address: A, router: Route)
 where
     A: ToSocketAddrs,
 {
-    let incoming = TcpListener::bind(address).expect("Could not bind to local addrss");
+    let incoming = TcpListener::bind(address).expect("Could not bind to local address");
 
-    thread::scope(|s| loop {
+    let router = Arc::new(router);
+
+    let mut pool = ThreadPool::new();
+
+    loop {
         let Ok((stream, _addr)) = incoming.accept() else {
             continue;
         };
 
-        let ctx = InternalContext {
+        let task = Task {
             stream,
-            router: &root,
+            router: router.clone(),
         };
 
-        s.spawn(|| handle_connection(ctx));
-    });
-}
-
-fn handle_connection(mut ctx: InternalContext) {
-    let mut buf = vec![0; 1024];
-    let mut bytes_read: usize = 0;
-
-    // Some left behind fragments of content-length aware reading.
-    let res = ctx.stream.read(&mut buf);
-
-    match res {
-        Ok(n) => {
-            if n == 0 {
-                return;
-            }
-
-            bytes_read += n;
-
-            let request = Request::try_from_bytes(&buf[..bytes_read]).expect("Failed to parse request");
-
-            handle_request(ctx, request);
-        }
-        Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => return,
-        Err(_) => return,
+        pool.send_task(task);
     }
-}
-
-fn handle_request(ctx: InternalContext, request: Request<String>) {
-    let path = request.uri().path().to_string();
-
-    let mut path_iter = path.split("/");
-
-    // Discard first in iter as it will always be an empty string
-    path_iter.next();
-
-    let mut ctx = Context {
-        internal: ctx,
-        request,
-        path_iter,
-    };
-
-    let mut cursor = ctx.internal.router;
-
-    loop {
-        for system in cursor.systems() {
-            if let Some(r) = system.call(&mut ctx) {
-                respond(ctx.internal.stream, r);
-                return;
-            }
-        }
-
-        let Some(next) = ctx.path_iter.next() else {
-            break;
-        };
-
-        if let Some(child) = cursor.get_child(next) {
-            cursor = child;
-        } else {
-            break;
-        }
-    }
-}
-
-fn respond(mut stream: TcpStream, response: RawResponse) {
-    let _ = stream.write_all(&response.into_bytes());
-
-    let _ = stream.flush();
 }
