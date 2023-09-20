@@ -7,19 +7,11 @@ use std::{
 
 use http::Request;
 
-use crate::{http_utils::{RequestExt, ResponseExt}, routing::Node, systems::RawResponse};
-
-pub struct Settings<A>
-where
-    A: ToSocketAddrs,
-{
-    address: A,
-    router: Node,
-}
+use crate::{http_utils::{RequestFromBytes, ResponseToBytes}, routing::Route, systems::RawResponse};
 
 struct InternalContext<'a> {
     stream: TcpStream,
-    router: &'a Node,
+    router: &'a Route,
 }
 
 pub struct Context<'a, 'b> {
@@ -28,7 +20,7 @@ pub struct Context<'a, 'b> {
     pub path_iter: Split<'b, &'static str>,
 }
 
-pub fn run<A>(address: A, root: Node)
+pub fn run<A>(address: A, root: Route)
 where
     A: ToSocketAddrs,
 {
@@ -53,7 +45,7 @@ fn handle_connection(mut ctx: InternalContext) {
     let mut bytes_read: usize = 0;
 
     // Some left behind fragments of content-length aware reading.
-    let res = ctx.stream.read(&mut buf[bytes_read..]);
+    let res = ctx.stream.read(&mut buf);
 
     match res {
         Ok(n) => {
@@ -63,7 +55,7 @@ fn handle_connection(mut ctx: InternalContext) {
 
             bytes_read += n;
 
-            let request = Request::parse_request(&buf[..bytes_read]).expect("Failed to parse request");
+            let request = Request::try_from_bytes(&buf[..bytes_read]).expect("Failed to parse request");
 
             handle_request(ctx, request);
         }
@@ -109,7 +101,7 @@ fn handle_request(ctx: InternalContext, request: Request<String>) {
 }
 
 fn respond(mut stream: TcpStream, response: RawResponse) {
-    let _ = stream.write_all(&response.to_bytes());
+    let _ = stream.write_all(&response.into_bytes());
 
     let _ = stream.flush();
 }

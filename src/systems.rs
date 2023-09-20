@@ -1,4 +1,4 @@
-use http::{Method, Response};
+use http::{Method, Response, Version};
 
 use crate::framework::Context;
 
@@ -24,25 +24,23 @@ impl MaybeIntoResponse for u16 {
     fn response(self) -> Option<RawResponse> {
         Some(
             Response::builder()
+                .version(Version::HTTP_10)
                 .status(self)
-                .header("Test", "Header")
                 .body(Vec::new())
                 .expect("Failed to build request"),
         )
     }
 }
 
-pub struct Query<T>
-where
-    T: Resolve,
-{
-    pub inner: Option<T>,
+impl MaybeIntoResponse for Response<String> {
+    fn response(self) -> Option<RawResponse> {
+        Some(self.map(|f| f.into_bytes()))
+    }
 }
 
 pub enum ResolveGuard<T> {
     /// Succesful value, run the system
     Value(T),
-    // Todo make this an actual response struct
     /// Don't run this system or any others, respond early with this response
     Respond(RawResponse),
     /// Don't run this system, but continue routing to other systems
@@ -56,19 +54,6 @@ impl<T> ResolveGuard<T> {
             ResolveGuard::Respond(v) => ResolveGuard::Respond(v),
             ResolveGuard::None => ResolveGuard::None,
         }
-    }
-}
-
-impl<T> Resolve for Query<T>
-where
-    T: Resolve<Output = Option<T>>,
-{
-    type Output = ResolveGuard<Self>;
-
-    fn resolve(ctx: &mut Context) -> ResolveGuard<Self> {
-        ResolveGuard::Value(Query {
-            inner: T::resolve(ctx),
-        })
     }
 }
 
@@ -123,13 +108,15 @@ impl DynSystem {
     }
 }
 
-impl<Arg1, R> From<fn(Arg1) -> R> for DynSystem
+impl<R, T> System<R> for T
 where
-    Arg1: Resolve<Output = ResolveGuard<Arg1>> + 'static,
-    R: MaybeIntoResponse + 'static,
+    T: Fn() -> R,
+    R: MaybeIntoResponse,
 {
-    fn from(value: fn(Arg1) -> R) -> Self {
-        DynSystem::new(value)
+    fn run(self, _ctx: &mut Context) -> Option<RawResponse> {
+        let r = self();
+
+        r.response()
     }
 }
 
