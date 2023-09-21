@@ -5,7 +5,7 @@ use std::{
 
 use crate::{
     routing::Route,
-    thread_pool::{Task, TaskPool},
+    tasks::{Task, TaskPool},
 };
 
 pub fn run<A>(address: A, router: Route)

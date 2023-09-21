@@ -1,6 +1,6 @@
 use http::{Method, Response, Version};
 
-use crate::thread_pool::Context;
+use crate::{tasks::Context, http_utils::IntoRawBytes};
 
 pub type RawResponse = Response<Vec<u8>>;
 
@@ -49,11 +49,13 @@ impl MaybeIntoResponse for u16 {
     }
 }
 
-impl MaybeIntoResponse for Response<String> {
+impl<T> MaybeIntoResponse for Response<T> where T: IntoRawBytes {
     fn response(self) -> Option<RawResponse> {
-        Some(self.map(|f| f.into_bytes()))
+        Some(self.map(|f| f.into_raw_bytes()))
     }
 }
+
+
 
 pub enum ResolveGuard<T> {
     /// Succesful value, run the system

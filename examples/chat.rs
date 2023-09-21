@@ -1,7 +1,7 @@
 use http::Response;
 use turnip_http::{framework::run, routing::Route, sys, systems::Get, http_utils::ResponseExt};
 
-fn get_users(_get: Get) -> Response<()> {
+fn get(_get: Get) -> Response<()> {
     Response::<()>::base(200.try_into().unwrap())
 }
 
