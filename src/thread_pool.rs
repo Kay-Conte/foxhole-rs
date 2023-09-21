@@ -1,8 +1,23 @@
-use std::{sync::{mpsc::{Sender, channel, Receiver, TryRecvError}, Arc, Mutex}, net::TcpStream, str::Split, io::{Read, Write}, collections::{VecDeque, vec_deque}};
+use std::{
+    collections::VecDeque,
+    io::{Read, Write},
+    net::TcpStream,
+    str::Split,
+    sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc, Condvar, Mutex,
+    },
+};
 
 use http::Request;
 
-use crate::{routing::Route, http_utils::{RequestFromBytes, ResponseToBytes}, systems::RawResponse};
+use crate::{
+    http_utils::{RequestFromBytes, ResponseToBytes},
+    routing::Route,
+    systems::RawResponse,
+};
+
+const MIN_TASK: usize = 4;
 
 pub struct Task {
     pub stream: TcpStream,
@@ -14,105 +29,104 @@ pub struct Context<'b> {
     pub path_iter: Split<'b, &'static str>,
 }
 
-#[derive(Clone)]
-struct ThreadWaker {
-    channel: Sender<usize>,
+struct Shared {
+    /// Pool of tasks that need to be run
+    pool: Mutex<VecDeque<Task>>,
+
+    /// Conditional var used to sleep and wake threads
+    condvar: Condvar,
+
+    active_tasks: AtomicUsize,
+
+    /// Total number of threads currently waiting for a task
+    waiting_tasks: AtomicUsize,
 }
 
-impl ThreadWaker {
-    fn new(sender: Sender<usize>) -> Self {
-        Self {
-            channel: sender,
-        }
+impl Shared {
+    fn active(&self) {
+        self.waiting_tasks.fetch_sub(1, Ordering::Release);
     }
 
-    fn wake(&mut self, id: usize) {
-        self.channel.send(id).expect("Channel hung up unexpectedly");
+    fn waiting(&self) {
+        self.waiting_tasks.fetch_add(1, Ordering::Release);
     }
 }
 
-pub struct ThreadPool {
-    thread_channels: Vec<Sender<Task>>,
-    waker: ThreadWaker,
-    receiver: Receiver<usize>,
+pub struct TaskPool {
+    shared: Arc<Shared>,
 }
 
-impl ThreadPool {
+impl TaskPool {
     pub fn new() -> Self {
-        let cpus = num_cpus::get();
-
-        let (sender, receiver) = channel();
-
-        let mut pool = ThreadPool {
-            thread_channels: Vec::new(),
-            waker: ThreadWaker::new(sender),
-            receiver,
+        let mut pool = TaskPool {
+            shared: Arc::new(Shared {
+                pool: Mutex::new(VecDeque::new()),
+                condvar: Condvar::new(),
+                active_tasks: AtomicUsize::new(0),
+                waiting_tasks: AtomicUsize::new(0),
+            }),
         };
 
-        for _ in 0..cpus {
-            let id = pool.spawn_thread();
-
-            pool.waker.wake(id);
+        for _ in 0..MIN_TASK {
+            pool.spawn_thread();
         }
 
         pool
     }
 
-    pub fn spawn_thread(&mut self) -> usize {
-        let (sender, receiver): (Sender<Task>, Receiver<Task>) = channel();
+    pub fn spawn_thread(&mut self) {
 
-        self.thread_channels.push(sender);
+        let thread_count = self.shared.active_tasks.fetch_add(1, Ordering::Acquire);
 
-        let mut waker = self.waker.clone();
+        println!("Spawning thread: {}", thread_count);
 
-        let id = self.thread_channels.len() - 1;
+        let shared = self.shared.clone();
 
         std::thread::spawn(move || {
-            while let Ok(task) = receiver.recv() {
+
+            loop {
+                let mut pool = shared.pool.lock().unwrap();
+
+                shared.waiting();
+                pool = shared.condvar.wait(pool).unwrap();
+                shared.active();
+
+                let Some(task) = pool.pop_front() else {
+                    continue;
+                };
+
+                drop(pool);
+
                 handle_connection(task);
-
-                waker.wake(id)
             }
-
-            println!("Closing thread");
         });
-
-
-        id
     }
 
     pub fn send_task(&mut self, task: Task) {
-        let next = match self.receiver.try_recv() {
-            Ok(v) => v,
-            Err(TryRecvError::Empty) => self.spawn_thread(),
-            Err(_) => panic!("Channel hung up unexpectedly")
-        };
+        self.shared.pool.lock().unwrap().push_back(task);
 
-        self.thread_channels[next].send(task).expect("Thread hung up unexpectedly");
-    } 
+        if self.shared.waiting_tasks.load(Ordering::Acquire) == 0 {
+            self.spawn_thread();
+        }
+
+        self.shared.condvar.notify_one();
+    }
 }
 
 fn handle_connection(mut task: Task) {
-    let mut buf = vec![0; 1024];
-    let mut bytes_read: usize = 0;
+    let mut buf: [u8; 1024] = [0; 1024];
 
-    // Some left behind fragments of content-length aware reading.
-    let res = task.stream.read(&mut buf);
-
-    match res {
+    match task.stream.read(&mut buf) {
         Ok(n) => {
             if n == 0 {
                 return;
             }
 
-            bytes_read += n;
-
-            let request = Request::try_from_bytes(&buf[..bytes_read]).expect("Failed to parse request");
+            let request = Request::try_from_bytes(&buf[..n]).expect("Failed to parse request");
 
             handle_request(task, request.map(|f| f.into_bytes()));
         }
-        Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => return,
-        Err(_) => return,
+        Err(_) => {},
     }
 }
 
@@ -124,10 +138,7 @@ fn handle_request(task: Task, request: Request<Vec<u8>>) {
     // Discard first in iter as it will always be an empty string
     path_iter.next();
 
-    let mut ctx = Context {
-        request,
-        path_iter,
-    };
+    let mut ctx = Context { request, path_iter };
 
     let mut cursor = task.router.as_ref();
 

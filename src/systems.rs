@@ -10,7 +10,7 @@ pub trait Resolve: Sized {
     fn resolve(ctx: &mut Context) -> Self::Output;
 }
 
-trait MaybeIntoResponse {
+pub trait MaybeIntoResponse {
     fn response(self) -> Option<RawResponse>;
 }
 
@@ -26,6 +26,8 @@ impl MaybeIntoResponse for u16 {
             Response::builder()
                 .version(Version::HTTP_10)
                 .status(self)
+                .header("Content-Type", "text/plain; charset=UTF-8")
+                .header("Content-Length", "0")
                 .body(Vec::new())
                 .expect("Failed to build request"),
         )

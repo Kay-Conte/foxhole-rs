@@ -4,7 +4,6 @@ use turnip_http::{
     systems::Get, sys,
 };
 
-
 fn get(_get: Get) -> u16 {
     200
 }

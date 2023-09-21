@@ -5,7 +5,7 @@ use std::{
 
 use crate::{
     routing::Route,
-    thread_pool::{Task, ThreadPool},
+    thread_pool::{Task, TaskPool},
 };
 
 pub fn run<A>(address: A, router: Route)
@@ -16,7 +16,7 @@ where
 
     let router = Arc::new(router);
 
-    let mut pool = ThreadPool::new();
+    let mut pool = TaskPool::new();
 
     loop {
         let Ok((stream, _addr)) = incoming.accept() else {
