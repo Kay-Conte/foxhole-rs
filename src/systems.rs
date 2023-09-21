@@ -20,6 +20,21 @@ impl MaybeIntoResponse for () {
     }
 }
 
+impl<T> MaybeIntoResponse for Option<T> where T: MaybeIntoResponse {
+    fn response(self) -> Option<RawResponse> {
+        self.map(|f| f.response()).flatten()
+    }
+}
+
+impl<T, E> MaybeIntoResponse for Result<T, E> where T: MaybeIntoResponse, E: MaybeIntoResponse {
+    fn response(self) -> Option<RawResponse> {
+        match self {
+            Ok(v) => v.response(),
+            Err(e) => e.response(),
+        }
+    }
+}
+
 impl MaybeIntoResponse for u16 {
     fn response(self) -> Option<RawResponse> {
         Some(
