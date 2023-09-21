@@ -1,6 +1,6 @@
 use http::{Request, Version, Response, StatusCode};
 
-use std::{io::{BufRead, Write}, net::TcpStream};
+use std::io::Write;
 
 use crate::systems::RawResponse;
 
