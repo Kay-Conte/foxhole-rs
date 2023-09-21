@@ -6,7 +6,7 @@ use std::{
     sync::{
         atomic::{AtomicUsize, Ordering},
         Arc, Condvar, Mutex,
-    },
+    }, time::Duration,
 };
 
 use http::Request;
@@ -17,7 +17,7 @@ use crate::{
     systems::RawResponse,
 };
 
-const MIN_TASK: usize = 4;
+const MIN_THREADS: usize = 4;
 
 pub struct Task {
     pub stream: TcpStream,
@@ -35,8 +35,6 @@ struct Shared {
 
     /// Conditional var used to sleep and wake threads
     condvar: Condvar,
-
-    active_tasks: AtomicUsize,
 
     /// Total number of threads currently waiting for a task
     waiting_tasks: AtomicUsize,
@@ -62,33 +60,41 @@ impl TaskPool {
             shared: Arc::new(Shared {
                 pool: Mutex::new(VecDeque::new()),
                 condvar: Condvar::new(),
-                active_tasks: AtomicUsize::new(0),
                 waiting_tasks: AtomicUsize::new(0),
             }),
         };
 
-        for _ in 0..MIN_TASK {
-            pool.spawn_thread();
+        for _ in 0..MIN_THREADS {
+            pool.spawn_thread(false);
         }
 
         pool
     }
 
-    pub fn spawn_thread(&mut self) {
-
-        let thread_count = self.shared.active_tasks.fetch_add(1, Ordering::Acquire);
-
-        println!("Spawning thread: {}", thread_count);
+    pub fn spawn_thread(&mut self, should_cull: bool) {
 
         let shared = self.shared.clone();
 
         std::thread::spawn(move || {
-
             loop {
                 let mut pool = shared.pool.lock().unwrap();
 
                 shared.waiting();
-                pool = shared.condvar.wait(pool).unwrap();
+
+                if should_cull {
+                    let (new, timeout) = shared.condvar.wait_timeout(pool, Duration::from_secs(5)).unwrap();
+
+                    if timeout.timed_out() {
+                        shared.active();
+
+                        return;
+                    }
+
+                    pool = new
+                } else {
+                    pool = shared.condvar.wait(pool).unwrap();
+                }
+
                 shared.active();
 
                 let Some(task) = pool.pop_front() else {
@@ -106,7 +112,7 @@ impl TaskPool {
         self.shared.pool.lock().unwrap().push_back(task);
 
         if self.shared.waiting_tasks.load(Ordering::Acquire) == 0 {
-            self.spawn_thread();
+            self.spawn_thread(true);
         }
 
         self.shared.condvar.notify_one();
