@@ -1,4 +1,4 @@
-use std::{sync::{mpsc::{Sender, channel, Receiver}, Arc}, net::TcpStream, str::Split, io::{Read, Write}};
+use std::{sync::{mpsc::{Sender, channel, Receiver, TryRecvError}, Arc, Mutex}, net::TcpStream, str::Split, io::{Read, Write}, collections::{VecDeque, vec_deque}};
 
 use http::Request;
 
@@ -14,45 +14,81 @@ pub struct Context<'b> {
     pub path_iter: Split<'b, &'static str>,
 }
 
+#[derive(Clone)]
+struct ThreadWaker {
+    channel: Sender<usize>,
+}
+
+impl ThreadWaker {
+    fn new(sender: Sender<usize>) -> Self {
+        Self {
+            channel: sender,
+        }
+    }
+
+    fn wake(&mut self, id: usize) {
+        self.channel.send(id).expect("Channel hung up unexpectedly");
+    }
+}
+
 pub struct ThreadPool {
     thread_channels: Vec<Sender<Task>>,
-    next: usize,
+    waker: ThreadWaker,
+    receiver: Receiver<usize>,
 }
 
 impl ThreadPool {
     pub fn new() -> Self {
         let cpus = num_cpus::get();
 
+        let (sender, receiver) = channel();
+
         let mut pool = ThreadPool {
             thread_channels: Vec::new(),
-            next: 0,
+            waker: ThreadWaker::new(sender),
+            receiver,
         };
 
         for _ in 0..cpus {
-            pool.add_thread();
+            let id = pool.spawn_thread();
+
+            pool.waker.wake(id);
         }
 
         pool
     }
 
-    pub fn add_thread(&mut self) {
+    pub fn spawn_thread(&mut self) -> usize {
         let (sender, receiver): (Sender<Task>, Receiver<Task>) = channel();
 
         self.thread_channels.push(sender);
 
+        let mut waker = self.waker.clone();
+
+        let id = self.thread_channels.len() - 1;
+
         std::thread::spawn(move || {
             while let Ok(task) = receiver.recv() {
-                handle_connection(task)
+                handle_connection(task);
+
+                waker.wake(id)
             }
 
             println!("Closing thread");
         });
+
+
+        id
     }
 
     pub fn send_task(&mut self, task: Task) {
-        self.thread_channels[self.next + 1 % self.thread_channels.len()].send(task);
+        let next = match self.receiver.try_recv() {
+            Ok(v) => v,
+            Err(TryRecvError::Empty) => self.spawn_thread(),
+            Err(_) => panic!("Channel hung up unexpectedly")
+        };
 
-        self.next = (self.next + 1) % self.thread_channels.len() - 1;
+        self.thread_channels[next].send(task).expect("Thread hung up unexpectedly");
     } 
 }
 
