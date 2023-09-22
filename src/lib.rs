@@ -86,7 +86,7 @@
 //! Feel free to open an issue or pull request if you have suggestions for features or improvements!
 //!
 //! # License
-//! MIT license (LICENSE or https://opensource.org/licenses/MIT)
+//! MIT license (LICENSE or <`https://opensource.org/licenses/MIT`>)
 
 pub mod framework;
 pub mod http_utils;

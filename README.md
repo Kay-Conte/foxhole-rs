@@ -19,7 +19,7 @@ MSRV: stable (1.65)
 vegemite = "0.1.0"
 ```
  
-vegemite uses a set of handler systems and routing modules to handle requests and responses. 
+vegemite uses a set of handler systems and routing modules to handle requests and responses.   
 Here's a starting example of a Hello World server.
 ```rust
 use vegemite::{run, sys, Get, Route, Response};

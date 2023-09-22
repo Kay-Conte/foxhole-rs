@@ -12,7 +12,7 @@ use std::{
 use http::Request;
 
 use crate::{
-    http_utils::{RequestFromBytes, ResponseToBytes},
+    http_utils::{RequestFromBytes, ResponseToBytes, ParseError},
     routing::Route,
 };
 
@@ -53,7 +53,14 @@ pub struct TaskPool {
     shared: Arc<Shared>,
 }
 
+impl Default for TaskPool {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl TaskPool {
+    #[must_use]
     pub fn new() -> Self {
         let mut pool = TaskPool {
             shared: Arc::new(Shared {
@@ -70,6 +77,10 @@ impl TaskPool {
         pool
     }
 
+    /// # Panics
+    ///
+    /// Will panic if IDK
+    // FIXME turnipper fix the documentation above
     pub fn spawn_thread(&mut self, should_cull: bool) {
 
         let shared = self.shared.clone();
@@ -89,7 +100,7 @@ impl TaskPool {
                         return;
                     }
 
-                    pool = new
+                    pool = new;
                 } else {
                     pool = shared.condvar.wait(pool).unwrap();
                 }
@@ -107,6 +118,9 @@ impl TaskPool {
         });
     }
 
+    /// # Panics
+    ///
+    /// Will panic if the mutex fails to lock
     pub fn send_task(&mut self, task: Task) {
         self.shared.pool.lock().unwrap().push_back(task);
 
@@ -119,25 +133,32 @@ impl TaskPool {
 }
 
 fn handle_connection(mut task: Task) {
-    let mut buf: [u8; 1024] = [0; 1024];
+    // let mut buf: [u8; 1024] = [0; 1024]
+    let mut buf = Vec::with_capacity(1024);
+    let mut bytes_read: usize = 0;
 
-    match task.stream.read(&mut buf) {
-        Ok(n) => {
-            if n == 0 {
-                return;
-            }
+    while let Ok(n) = task.stream.read(&mut buf[bytes_read..]) {
+        if n == 0 { break; }
 
-            let request = Request::try_from_bytes(&buf[..n]).expect("Failed to parse request");
-
-            handle_request(task, request.map(|f| f.into_bytes()));
+        match Request::try_from_bytes(&buf[..bytes_read]) {
+            Ok(req) => {
+                handle_request(task, req);
+                break;
+            },
+            Err(ParseError::NotEnoughBytes) => {
+                bytes_read += n;
+                buf.resize(bytes_read + n, 0);
+                continue;
+            },
+            Err(_) => break,
         }
-        Err(_) => {},
     }
 }
 
 fn handle_request(mut task: Task, request: Request<Vec<u8>>) {
     let path = request.uri().path().to_string();
 
+    #[allow(clippy::single_char_pattern)]
     let mut path_iter = path.split("/");
 
     // Discard first in iter as it will always be an empty string
