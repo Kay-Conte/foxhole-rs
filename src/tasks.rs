@@ -14,7 +14,6 @@ use http::Request;
 use crate::{
     http_utils::{RequestFromBytes, ResponseToBytes},
     routing::Route,
-    systems::RawResponse,
 };
 
 const MIN_THREADS: usize = 4;
@@ -136,7 +135,7 @@ fn handle_connection(mut task: Task) {
     }
 }
 
-fn handle_request(task: Task, request: Request<Vec<u8>>) {
+fn handle_request(mut task: Task, request: Request<Vec<u8>>) {
     let path = request.uri().path().to_string();
 
     let mut path_iter = path.split("/");
@@ -151,7 +150,10 @@ fn handle_request(task: Task, request: Request<Vec<u8>>) {
     loop {
         for system in cursor.systems() {
             if let Some(r) = system.call(&mut ctx) {
-                respond(task.stream, r);
+                let _ = task.stream.write_all(&r.into_bytes());
+
+                let _ = task.stream.flush();
+
                 return;
             }
         }
@@ -166,10 +168,4 @@ fn handle_request(task: Task, request: Request<Vec<u8>>) {
             break;
         }
     }
-}
-
-fn respond(mut stream: TcpStream, response: RawResponse) {
-    let _ = stream.write_all(&response.into_bytes());
-
-    let _ = stream.flush();
 }

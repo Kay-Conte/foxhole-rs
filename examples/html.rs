@@ -1,25 +1,27 @@
 use http::Response;
-use vegemite::{
-    framework::run,
-    routing::Route,
-    sys,
-    systems::{MaybeIntoResponse, Get}
-};
+
+use vegemite::{run, sys, Get, IntoResponse, Route};
 
 struct Html {
     value: String,
 }
 
-impl MaybeIntoResponse for Html {
-    fn response(self) -> Option<vegemite::systems::RawResponse> {
+impl IntoResponse for Html {
+    fn response(self) -> Response<Vec<u8>> {
         let bytes = self.value.into_bytes();
 
-        Some(Response::builder().header("Content-Type", "text/html; charset=utf-8").header("Content-Length", format!("{}", bytes.len())).body(bytes).unwrap())
+        Response::builder()
+            .header("Content-Type", "text/html; charset=utf-8")
+            .header("Content-Length", format!("{}", bytes.len()))
+            .body(bytes)
+            .unwrap()
     }
 }
 
 fn page(_get: Get) -> Html {
-    Html { value: "<h1> Hey Friend </h1>".to_string() }
+    Html {
+        value: "<h1> Hey Friend </h1>".to_string(),
+    }
 }
 
 fn main() {

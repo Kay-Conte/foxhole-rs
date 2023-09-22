@@ -10,33 +10,43 @@ pub trait Resolve: Sized {
     fn resolve(ctx: &mut Context) -> Self::Output;
 }
 
+pub trait IntoResponse {
+    fn response(self) -> RawResponse;
+}
+
 pub trait MaybeIntoResponse {
-    fn response(self) -> Option<RawResponse>;
+    fn maybe_response(self) -> Option<RawResponse>;
+}
+
+impl<T> MaybeIntoResponse for T where T: IntoResponse {
+    fn maybe_response(self) -> Option<RawResponse> {
+        Some(self.response())
+    }
 }
 
 impl MaybeIntoResponse for () {
-    fn response(self) -> Option<RawResponse> {
+    fn maybe_response(self) -> Option<RawResponse> {
         None
     }
 }
 
 impl<T> MaybeIntoResponse for Option<T> where T: MaybeIntoResponse {
-    fn response(self) -> Option<RawResponse> {
-        self.map(|f| f.response()).flatten()
+    fn maybe_response(self) -> Option<RawResponse> {
+        self.map(|f| f.maybe_response()).flatten()
     }
 }
 
 impl<T, E> MaybeIntoResponse for Result<T, E> where T: MaybeIntoResponse, E: MaybeIntoResponse {
-    fn response(self) -> Option<RawResponse> {
+    fn maybe_response(self) -> Option<RawResponse> {
         match self {
-            Ok(v) => v.response(),
-            Err(e) => e.response(),
+            Ok(v) => v.maybe_response(),
+            Err(e) => e.maybe_response(),
         }
     }
 }
 
 impl MaybeIntoResponse for u16 {
-    fn response(self) -> Option<RawResponse> {
+    fn maybe_response(self) -> Option<RawResponse> {
         Some(
             Response::builder()
                 .version(Version::HTTP_10)
@@ -50,7 +60,7 @@ impl MaybeIntoResponse for u16 {
 }
 
 impl<T> MaybeIntoResponse for Response<T> where T: IntoRawBytes {
-    fn response(self) -> Option<RawResponse> {
+    fn maybe_response(self) -> Option<RawResponse> {
         Some(self.map(|f| f.into_raw_bytes()))
     }
 }
@@ -135,6 +145,7 @@ macro_rules! system {
             $($x: Resolve<Output = ResolveGuard<$x>>,)*
             R: MaybeIntoResponse,
         {
+            #[allow(unused)]
             fn run(self, ctx: &mut Context) -> Option<RawResponse> {
 
                 
@@ -149,25 +160,14 @@ macro_rules! system {
 
                 let r = self($($x,)*);
 
-                r.response()
+                r.maybe_response()
 
             }
         }
     }
 }
 
-impl<R, T> System<R> for T
-where
-    T: Fn() -> R,
-    R: MaybeIntoResponse,
-{
-    fn run(self, _ctx: &mut Context) -> Option<RawResponse> {
-        let r = self();
-
-        r.response()
-    }
-}
-
+system! { }
 system! { A }
 system! { A, B }
 system! { A, B, C }
