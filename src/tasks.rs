@@ -41,12 +41,12 @@ struct Shared {
 }
 
 impl Shared {
-    fn active(&self) {
-        self.waiting_tasks.fetch_sub(1, Ordering::Release);
-    }
-
     fn waiting(&self) {
         self.waiting_tasks.fetch_add(1, Ordering::Release);
+    }
+
+    fn release(&self) {
+        self.waiting_tasks.fetch_sub(1, Ordering::Release);
     }
 }
 
@@ -85,7 +85,7 @@ impl TaskPool {
                     let (new, timeout) = shared.condvar.wait_timeout(pool, Duration::from_secs(5)).unwrap();
 
                     if timeout.timed_out() {
-                        shared.active();
+                        shared.release();
 
                         return;
                     }
@@ -95,7 +95,7 @@ impl TaskPool {
                     pool = shared.condvar.wait(pool).unwrap();
                 }
 
-                shared.active();
+                shared.release();
 
                 let Some(task) = pool.pop_front() else {
                     continue;

@@ -127,6 +127,35 @@ impl DynSystem {
     }
 }
 
+macro_rules! system {
+    ($($x:ident),*) => {
+        impl<R, $($x,)* T> System<(R, $($x,)*)> for T
+        where
+            T: Fn($($x,)*) -> R,
+            $($x: Resolve<Output = ResolveGuard<$x>>,)*
+            R: MaybeIntoResponse,
+        {
+            fn run(self, ctx: &mut Context) -> Option<RawResponse> {
+
+                
+                $(
+                #[allow(non_snake_case)]
+                let $x = match $x::resolve(ctx) {
+                    ResolveGuard::Value(v) => v,
+                    ResolveGuard::None => return None,
+                    ResolveGuard::Respond(r) => return Some(r),
+                };
+                )*
+
+                let r = self($($x,)*);
+
+                r.response()
+
+            }
+        }
+    }
+}
+
 impl<R, T> System<R> for T
 where
     T: Fn() -> R,
@@ -139,47 +168,9 @@ where
     }
 }
 
-impl<R, Arg1, T> System<(R, Arg1)> for T
-where
-    T: Fn(Arg1) -> R,
-    Arg1: Resolve<Output = ResolveGuard<Arg1>>,
-    R: MaybeIntoResponse,
-{
-    fn run(self, ctx: &mut Context) -> Option<RawResponse> {
-        let arg1 = match Arg1::resolve(ctx) {
-            ResolveGuard::Value(v) => v,
-            ResolveGuard::None => return None,
-            ResolveGuard::Respond(r) => return Some(r),
-        };
-
-        let r = self(arg1);
-
-        r.response()
-    }
-}
-
-impl<R, Arg1, Arg2, T> System<(R, Arg1, Arg2)> for T
-where
-    T: Fn(Arg1, Arg2) -> R,
-    Arg1: Resolve<Output = ResolveGuard<Arg1>>,
-    Arg2: Resolve<Output = ResolveGuard<Arg2>>,
-    R: MaybeIntoResponse,
-{
-    fn run(self, ctx: &mut Context) -> Option<RawResponse> {
-        let arg1 = match Arg1::resolve(ctx) {
-            ResolveGuard::Value(v) => v,
-            ResolveGuard::None => return None,
-            ResolveGuard::Respond(r) => return Some(r),
-        };
-
-        let arg2 = match Arg2::resolve(ctx) {
-            ResolveGuard::Value(v) => v,
-            ResolveGuard::None => return None,
-            ResolveGuard::Respond(r) => return Some(r),
-        };
-
-        let r = self(arg1, arg2);
-
-        r.response()
-    }
-}
+system! { A }
+system! { A, B }
+system! { A, B, C }
+system! { A, B, C, D }
+system! { A, B, C, D, E }
+system! { A, B, C, D, E, F}

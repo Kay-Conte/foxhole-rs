@@ -3,6 +3,6 @@ macro_rules! sys {
     () => { vec![] };
 
     ($($x:ident),*) => {
-        vec![$(turnip_http::systems::DynSystem::new($x),)*]
+        vec![$(vegemite::systems::DynSystem::new($x),)*]
     };
 }

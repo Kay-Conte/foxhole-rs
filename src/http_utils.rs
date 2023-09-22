@@ -142,6 +142,12 @@ impl IntoRawBytes for Vec<u8> {
     }
 }
 
+impl IntoRawBytes for String {
+    fn into_raw_bytes(self) -> Vec<u8> {
+        self.into_bytes()
+    }
+}
+
 pub trait ResponseExt: Sized {
     fn base(code: StatusCode) -> Response<()>;
 
