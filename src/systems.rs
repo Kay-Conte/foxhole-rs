@@ -4,6 +4,7 @@ use crate::{tasks::Context, http_utils::IntoRawBytes};
 
 pub type RawResponse = Response<Vec<u8>>;
 
+/// `Resolve` is a trait 
 pub trait Resolve: Sized {
     type Output;
 
@@ -66,7 +67,8 @@ impl<T> MaybeIntoResponse for Response<T> where T: IntoRawBytes {
 }
 
 
-
+/// ReoslveGuard is the expected return type of top level `Resolve`able objects. Only types that
+/// return `ResolveGuard` can be used as function parameters
 pub enum ResolveGuard<T> {
     /// Succesful value, run the system
     Value(T),
@@ -86,6 +88,8 @@ impl<T> ResolveGuard<T> {
     }
 }
 
+/// Get request guard. A system with this as a parameter requires that the method be GET in order
+/// to run.
 pub struct Get;
 
 impl Resolve for Get {
@@ -100,6 +104,8 @@ impl Resolve for Get {
     }
 }
 
+/// Get request guard. A system with this as a parameter requires that the method be POST in order
+/// to run.
 pub struct Post;
 
 impl Resolve for Post {
@@ -138,7 +144,7 @@ impl DynSystem {
 }
 
 macro_rules! system {
-    ($($x:ident),*) => {
+    ($($x:ident),* $(,)?) => {
         impl<R, $($x,)* T> System<(R, $($x,)*)> for T
         where
             T: Fn($($x,)*) -> R,
@@ -154,9 +160,7 @@ macro_rules! system {
                 let $x = match $x::resolve(ctx) {
                     ResolveGuard::Value(v) => v,
                     ResolveGuard::None => return None,
-                    ResolveGuard::Respond(r) => return Some(r),
-                };
-                )*
+                    ResolveGuard::Respond(r) => return Some(r), };)*
 
                 let r = self($($x,)*);
 
@@ -167,10 +171,16 @@ macro_rules! system {
     }
 }
 
-system! { }
-system! { A }
-system! { A, B }
-system! { A, B, C }
-system! { A, B, C, D }
-system! { A, B, C, D, E }
-system! { A, B, C, D, E, F}
+macro_rules! all {
+    () => {
+        system! { }
+    };
+
+    ($first:ident, $($x:ident),*$(,)?)  => {
+        system! { $first, $($x,)* }
+
+        all! { $($x,)*}
+    }
+}
+
+all! { A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P }

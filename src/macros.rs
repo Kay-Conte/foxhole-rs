@@ -1,3 +1,5 @@
+
+/// This macro builds a vec of DynSystem from passed in systems.
 #[macro_export]
 macro_rules! sys {
     () => { vec![] };
