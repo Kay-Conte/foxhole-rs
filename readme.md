@@ -5,7 +5,7 @@
 # Vegemite
 A Simple, Fast, and Flexible HTTP framework for Rust, Aimed to help you finish your projects.
 
-MSRV: stable (1.65)
+MSRV: stable
 
 # Features
 - Blazing fast performance, greater than [axum](https://github.com/tokio-rs/axum) and [actix](https://github.com/) for non keep-alive requests.
