@@ -1,3 +1,5 @@
+//! This module provides the application entry point.
+
 use std::{
     net::{TcpListener, ToSocketAddrs},
     sync::Arc,
@@ -8,6 +10,7 @@ use crate::{
     tasks::{Task, TaskPool},
 };
 
+/// Application entry point. Call this function to run your application.
 pub fn run<A>(address: A, router: Route)
 where
     A: ToSocketAddrs,

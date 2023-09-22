@@ -1,3 +1,6 @@
+//! This module provides http utility traits and functions for parsing and handling Requests and
+//! Responses
+
 use http::{Request, Version, Response, StatusCode};
 
 use std::io::Write;

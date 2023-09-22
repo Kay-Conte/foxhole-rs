@@ -9,7 +9,6 @@ fn get(_get: Get) -> u16 {
     200
 }
 
-
 // This one only runs on POST
 fn post(_post: Post) -> u16 {
     200
