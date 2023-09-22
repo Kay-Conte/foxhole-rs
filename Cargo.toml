@@ -2,6 +2,8 @@
 name = "vegemite"
 version = "0.1.0"
 edition = "2021"
+description = "A Blazingly-fast http framework"
+license = "MIT"
 
 [dependencies]
 http = "0.2.9"
