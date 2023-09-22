@@ -5,7 +5,7 @@
 # Vegemite
 A Simple, Fast, and Flexible HTTP framework for Rust, Aimed to help you finish your projects.
 
-MSRV: stable (1.65)
+MSRV: stable
 
 # Features
 - Blazing fast performance, greater than [axum](https://github.com/tokio-rs/axum) and [actix](https://github.com/) for non keep-alive requests.
@@ -19,7 +19,7 @@ MSRV: stable (1.65)
 vegemite = "0.1.0"
 ```
 
-vegemite uses a set of handler systems and routing modules to handle requests and responses. 
+`vegemite` uses a set of handler systems and traits to handle requests and responses. 
 Here's a starting example of a Hello World server.
 ```rust
 use vegemite::{run, sys, Get, Route, Response};
