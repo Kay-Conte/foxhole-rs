@@ -1,25 +1,36 @@
-[![Build Status](https://travis-ci.org/turnip-rs/vegemite.svg?branch=master)](https://travis-ci.org/turnip-rs/vegemite)
+<div align="center">
+  <h1>Vegemite</h1>
+  <p>
+    <strong>Async-Free HTTP framework for Rust</strong>
+  </p>
+  <p>
+
+![Minimum Supported Rust Version](https://img.shields.io/badge/rustc-1.65+-ab6000.svg)
 [![Crates.io](https://img.shields.io/crates/v/vegemite.svg)](https://crates.io/crates/vegemite)
 [![Docs.rs](https://docs.rs/vegemite/badge.svg)](https://docs.rs/vegemite)
+![Code Size](https://img.shields.io/github/languages/code-size/Kay-Conte/vegemite-rs)
+![Maintained](https://img.shields.io/maintenance/yes/2023?style=flat-square)
+[![License](https://img.shields.io/crates/l/vegemite.svg)](https://opensource.org/licenses/MIT)
+
+  </p>
+</div>
  
-# Vegemite
-A Simple, Fast, and Flexible HTTP framework for Rust, Aimed to help you finish your projects.
- 
-MSRV: stable (1.65)
+Vegemite is Simple, Fast, and Aimed at allowing you finish your projects.
  
 # Features
-- Blazing fast performance, greater than [axum](https://github.com/tokio-rs/axum) and [actix](https://github.com/) for non keep-alive requests.
+- Blazing fast performance, greater than [Axum](https://github.com/tokio-rs/axum) and [Actix](https://github.com/) for non keep-alive requests.
 - Built-in threading system that allows you to efficiently handle requests.
 - Absolutely no async elements, improving ergonomics.
 - Minimal build size, 500kb when stripped.
  
 # Getting Started
+Add this to your cargo.toml
 ```toml
 [dependencies]
 vegemite = "0.1.0"
 ```
  
-vegemite uses a set of handler systems and routing modules to handle requests and responses.   
+Vegemite uses a set of handler systems and routing modules to handle requests and responses.   
 Here's a starting example of a Hello World server.
 ```rust
 use vegemite::{run, sys, Get, Route, Response};
