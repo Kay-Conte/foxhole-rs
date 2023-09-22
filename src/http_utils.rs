@@ -1,7 +1,7 @@
 //! This module provides http utility traits and functions for parsing and handling Requests and
 //! Responses
 
-use http::{Request, Version, Response, StatusCode};
+use http::{Request, Response, StatusCode, Version};
 
 use std::io::Write;
 
@@ -53,7 +53,7 @@ impl VersionExt for Version {
             &Version::HTTP_11 => "HTTP/1.1".to_string(),
             &Version::HTTP_2 => "HTTP/2.0".to_string(),
             &Version::HTTP_3 => "HTTP/3.0".to_string(),
-            _ => unreachable!()
+            _ => unreachable!(),
         }
     }
 }
@@ -93,8 +93,16 @@ impl RequestFromBytes for Request<String> {
     }
 }
 
-fn parse_response_line_into_buf<T>(buf: &mut Vec<u8>, request: &Response<T>) -> Result<(), std::io::Error> {
-    write!(buf, "{} {} \r\n", request.version().to_string(), request.status().to_string())?;
+fn parse_response_line_into_buf<T>(
+    buf: &mut Vec<u8>,
+    request: &Response<T>,
+) -> Result<(), std::io::Error> {
+    write!(
+        buf,
+        "{} {} \r\n",
+        request.version().to_string(),
+        request.status().to_string()
+    )?;
 
     for (key, value) in request.headers() {
         buf.write(key.as_str().as_bytes())?;
@@ -104,7 +112,7 @@ fn parse_response_line_into_buf<T>(buf: &mut Vec<u8>, request: &Response<T>) -> 
         buf.write(value.as_bytes())?;
 
         write!(buf, "\r\n")?;
-    } 
+    }
 
     write!(buf, "\r\n")?;
 
@@ -112,10 +120,13 @@ fn parse_response_line_into_buf<T>(buf: &mut Vec<u8>, request: &Response<T>) -> 
 }
 
 pub trait ResponseToBytes {
-    fn into_bytes(self) -> Vec<u8>; 
+    fn into_bytes(self) -> Vec<u8>;
 }
 
-impl<T> ResponseToBytes for Response<T> where T: IntoRawBytes {
+impl<T> ResponseToBytes for Response<T>
+where
+    T: IntoRawBytes,
+{
     fn into_bytes(self) -> Vec<u8> {
         let mut buf = vec![];
 
@@ -159,7 +170,10 @@ pub trait ResponseExt: Sized {
     fn into_raw_response(self) -> RawResponse;
 }
 
-impl<T> ResponseExt for Response<T> where T: IntoRawBytes {
+impl<T> ResponseExt for Response<T>
+where
+    T: IntoRawBytes,
+{
     fn base(code: StatusCode) -> Response<()> {
         Response::builder().status(code).body(()).unwrap()
     }

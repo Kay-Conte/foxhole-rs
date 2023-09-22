@@ -6,7 +6,8 @@ use std::{
     sync::{
         atomic::{AtomicUsize, Ordering},
         Arc, Condvar, Mutex,
-    }, time::Duration,
+    },
+    time::Duration,
 };
 
 use http::Request;
@@ -71,7 +72,6 @@ impl TaskPool {
     }
 
     pub fn spawn_thread(&mut self, should_cull: bool) {
-
         let shared = self.shared.clone();
 
         std::thread::spawn(move || {
@@ -81,9 +81,13 @@ impl TaskPool {
                 shared.waiting();
 
                 if should_cull {
-                    let (new, timeout) = shared.condvar.wait_timeout(pool, Duration::from_secs(5)).unwrap();
+                    let (new, timeout) = shared
+                        .condvar
+                        .wait_timeout(pool, Duration::from_secs(5))
+                        .unwrap();
 
                     if timeout.timed_out() {
+                        // Make sure not to bloat waiting count
                         shared.release();
 
                         return;
@@ -131,7 +135,7 @@ fn handle_connection(mut task: Task) {
 
             handle_request(task, request.map(|f| f.into_bytes()));
         }
-        Err(_) => {},
+        Err(_) => {}
     }
 }
 
