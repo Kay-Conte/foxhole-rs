@@ -83,6 +83,8 @@ Transfer/sec:     14.91MB
 ```
  
 ### Axum:
+> **Note:**
+> No idea what's up with socket errors on `Connection: close`, but we were unable to fix em.
 ```
 $ wrk -t12 -c400 -d30s -H"Connection: close" http://localhost:5000
 Running 10s test @ http://localhost:8080

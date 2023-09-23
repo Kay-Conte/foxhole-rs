@@ -105,7 +105,7 @@ impl<'a> RequestFromBytes<'a> for Request<&'a [u8]> {
         }
 
         version = Version::parse_version(h[2])?;
-        uri = h.get(1).ok_or(ParseError::MalformedRequest)?.to_string();
+        uri = (*h.get(1).ok_or(ParseError::MalformedRequest)?).to_string();
 
 
         //
