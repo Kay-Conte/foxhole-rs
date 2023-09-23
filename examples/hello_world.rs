@@ -1,23 +1,18 @@
-use vegemite::{run, sys, Get, Route, Post};
+use vegemite::{run, sys, Get, Route};
+use http::Response;
 
-// The get parameter of this function ensures that it is only run when the request is a get
-// request. Note that parameters are evaluated from left to right. If a parameter returns
-// `ResolveGuard::None` or `ResolveGuard::Respond` early, subsequent parameters will not be
-// evaluated.
-fn get(_get: Get) -> u16 {
-    // u16 implements `MaybeIntoResponse` such that the framework can resolve a response from it
-    200
-}
+fn get(_get: Get) -> Response<String> {
+    let body = "<h1>Hello World<h1>";
 
-// This one only runs on POST
-fn post(_post: Post) -> u16 {
-    200
+    Response::builder()
+        .status(200)
+        .body(body.to_string())
+        .unwrap()
 }
 
 fn main() {
-    // systems are executed from the root to the endpoint and from left to right of each node until
-    // a response is formed. 
-    let router = Route::new(sys![get, post]);
+    let addr = "127.0.0.1:8080";
+    let router = Route::new(sys![get]);
 
-    run("0.0.0.0:5000", router);
+    run(addr, router);
 }

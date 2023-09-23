@@ -35,7 +35,7 @@ impl Route {
     }
     
     /// Route to a child of this node by path
-    pub fn get_child<'a, 'b>(&'a self, path: &'b str) -> Option<&'a Route> {
+    pub fn get_child<'a>(&'a self, path: &str) -> Option<&'a Route> {
         self.children.get(path)
     }
 }

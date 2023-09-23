@@ -1,45 +1,59 @@
-[![Build Status](https://travis-ci.org/turnip-rs/vegemite.svg?branch=master)](https://travis-ci.org/turnip-rs/vegemite)
+<div align="center">
+  <h1>Vegemite</h1>
+  <p>
+    <strong>Async-Free HTTP framework for Rust</strong>
+  </p>
+  <p>
+
+![Minimum Supported Rust Version](https://img.shields.io/badge/rustc-1.65+-ab6000.svg)
 [![Crates.io](https://img.shields.io/crates/v/vegemite.svg)](https://crates.io/crates/vegemite)
 [![Docs.rs](https://docs.rs/vegemite/badge.svg)](https://docs.rs/vegemite)
+![Code Size](https://img.shields.io/github/languages/code-size/Kay-Conte/vegemite-rs)
+![Maintained](https://img.shields.io/maintenance/yes/2023?style=flat-square)
+[![License](https://img.shields.io/crates/l/vegemite.svg)](https://opensource.org/licenses/MIT)
 
-# Vegemite
-A Simple, Fast, and Flexible HTTP framework for Rust, Aimed to help you finish your projects.
-
-MSRV: stable
-
+  </p>
+</div>
+ 
+Vegemite is Simple, Fast, and Aimed at allowing you finish your projects.
+ 
 # Features
-- Blazing fast performance, greater than [axum](https://github.com/tokio-rs/axum) and [actix](https://github.com/) for non keep-alive requests.
+- Blazing fast performance, greater than [Axum](https://github.com/tokio-rs/axum) and [Actix](https://github.com/) for non keep-alive requests.
 - Built-in threading system that allows you to efficiently handle requests.
 - Absolutely no async elements, improving ergonomics.
 - Minimal build size, 500kb when stripped.
-
+ 
 # Getting Started
+Add this to your cargo.toml
 ```toml
 [dependencies]
 vegemite = "0.1.0"
 ```
-
-`vegemite` uses a set of handler systems and traits to handle requests and responses. 
+ 
+Vegemite uses a set of handler systems and routing modules to handle requests and responses.   
 Here's a starting example of a Hello World server.
 ```rust
 use vegemite::{run, sys, Get, Route, Response};
-
+ 
 fn get(_get: Get) -> Response<String> {
     let content = String::from("<h1>Hello World<h1>");
-
+ 
     Response::builder()
         .status(200)
         .body(content)
         .unwrap()
-}
-
+} 
+ 
 fn main() {
     let router = Route::new(sys![get]);
-
+ 
     run("127.0.0.1:8080", router);
-}
+} 
 ```
-
+ 
+# Contributing
+Feel free to open an issue or pull request if you have suggestions for features or improvements!
+ 
 # Benchmarks
 These were run on a AMD Ryzen 7 5700X 3.4GHz with 32GB of RAM.  
 ### Vegemite:
@@ -54,7 +68,7 @@ Running 10s test @ http://localhost:5000
 Requests/sec: 112731.16
 Transfer/sec:      8.82MB
 ```
-
+ 
 ### Actix:
 ```
 $ wrk -t12 -c400 -d30s -H"Connection: close" http://localhost:5000
@@ -67,8 +81,10 @@ Running 10s test @ http://localhost:8080
 Requests/sec: 105641.69
 Transfer/sec:     14.91MB
 ```
-
-### Axum: not sure why the errors on "Connection: close"
+ 
+### Axum:
+> **Note:**
+> No idea what's up with socket errors on `Connection: close`, but we were unable to fix em.
 ```
 $ wrk -t12 -c400 -d30s -H"Connection: close" http://localhost:5000
 Running 10s test @ http://localhost:8080
@@ -81,10 +97,6 @@ Running 10s test @ http://localhost:8080
 Requests/sec: 104027.39
 Transfer/sec:     13.69MB
 ```
-
-# Contributing
-Feel free to open an issue or pull request if you have suggestions for features or improvements!
-
-
+ 
 # License
 MIT license (LICENSE or https://opensource.org/licenses/MIT)

@@ -3,25 +3,27 @@
 
 use http::{Request, Response, StatusCode, Version};
 
-use std::io::Write;
+use std::io::{Write, BufReader, BufRead};
 
 use crate::systems::RawResponse;
 
 #[derive(Debug)]
 pub enum ParseError {
-    InvalidString,
-    InvalidSequence,
+    MalformedRequest,
+    InvalidMethod,
+    InvalidProtocolVer,
     InvalidRequestParts,
+    NotEnoughBytes,
 }
 
 impl std::fmt::Display for ParseError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        use ParseError::*;
-
         match self {
-            InvalidString => write!(f, "Invalid String"),
-            InvalidSequence => write!(f, "Invalid Sequence"),
-            InvalidRequestParts => write!(f, "Invalid Request Parts"),
+            ParseError::InvalidProtocolVer => write!(f, "Invalid Protocol"),
+            ParseError::MalformedRequest => write!(f, "Malformed Request"),
+            ParseError::NotEnoughBytes => write!(f, "Not Enough Bytes"),
+            ParseError::InvalidMethod => write!(f, "Invalid Method"),
+            ParseError::InvalidRequestParts => write!(f, "Invalid Request Parts"),
         }
     }
 }
@@ -29,6 +31,9 @@ impl std::fmt::Display for ParseError {
 impl std::error::Error for ParseError {}
 
 pub trait VersionExt: Sized {
+    /// # Errors
+    ///
+    /// Returns `Err` if the `&str` isn't a valid version of the HTTP protocol
     fn parse_version(s: &str) -> Result<Self, ParseError>;
 
     fn to_string(&self) -> String;
@@ -42,56 +47,86 @@ impl VersionExt for Version {
             "HTTP/1.1" => Version::HTTP_11,
             "HTTP/2.0" => Version::HTTP_2,
             "HTTP/3.0" => Version::HTTP_3,
-            _ => return Err(ParseError::InvalidSequence),
+            _ => return Err(ParseError::InvalidProtocolVer),
         })
     }
 
     fn to_string(&self) -> String {
-        match self {
-            &Version::HTTP_09 => "HTTP/0.9".to_string(),
-            &Version::HTTP_10 => "HTTP/1.0".to_string(),
-            &Version::HTTP_11 => "HTTP/1.1".to_string(),
-            &Version::HTTP_2 => "HTTP/2.0".to_string(),
-            &Version::HTTP_3 => "HTTP/3.0".to_string(),
+        match *self {
+            Version::HTTP_09 => "HTTP/0.9".to_string(),
+            Version::HTTP_10 => "HTTP/1.0".to_string(),
+            Version::HTTP_11 => "HTTP/1.1".to_string(),
+            Version::HTTP_2  => "HTTP/2.0".to_string(),
+            Version::HTTP_3  => "HTTP/3.0".to_string(),
             _ => unreachable!(),
         }
     }
 }
 
-pub trait RequestFromBytes {
-    fn try_from_bytes(bytes: &[u8]) -> Result<Request<String>, ParseError>;
+pub trait RequestFromBytes<'a> {
+    /// # Errors
+    ///
+    /// Returns `Err` if the bytes are not a valid HTTP request
+    fn try_from_bytes(bytes: &[u8]) -> Result<Request<Vec<u8>>, ParseError>;
 }
 
-impl RequestFromBytes for Request<String> {
-    fn try_from_bytes(bytes: &[u8]) -> Result<Request<String>, ParseError> {
-        let raw = std::str::from_utf8(bytes).map_err(|_| ParseError::InvalidString)?;
+/// the entirety of the header must be valid utf8
+impl<'a> RequestFromBytes<'a> for Request<&'a [u8]> {
+    fn try_from_bytes(bytes: &[u8]) -> Result<Request<Vec<u8>>, ParseError> {
+        let separator = bytes.windows(4).position(|w| w == b"\r\n\r\n")
+            .ok_or(ParseError::MalformedRequest)?;
 
-        let mut parts = raw.split("\r\n\r\n");
+        let mut lines = BufReader::new(&bytes[..separator]).lines();
 
-        let headers = parts.next().unwrap_or("");
-        let body = parts.next().unwrap_or("");
+        let mut request = if let Some(Ok(line)) = lines.next() {
+            let h: Vec<&str> = line.split(' ').collect();
 
-        let mut entries = headers.lines();
-        let mut request = entries.next().unwrap_or("").split_whitespace();
-        let method = request.next().unwrap_or("");
-        let uri = request.next().unwrap_or("");
-        let version = Version::parse_version(request.next().unwrap_or(""))?;
+            if h.len() != 3 { 
+                return Err(ParseError::MalformedRequest); 
+            }
+            
+            let method = match h[0] {
+                "GET" | "POST" | "PUT" | "DELETE" | "HEAD" | "OPTIONS" | "CONNECT" | "TRACE" | "PATH" 
+                    => h[0],
+                _ => return Err(ParseError::InvalidMethod),
+            };
 
-        let mut request = Request::builder().method(method).uri(uri).version(version);
+            Request::builder()
+                .method(method)
+                .uri(h[1])
+                .version(Version::parse_version(h[2])?)
+        }
 
-        for entry in entries {
-            let mut parts = entry.splitn(2, ": ");
-            let key = parts.next().unwrap_or("");
-            let value = parts.next().unwrap_or("");
+        else {
+            return Err(ParseError::MalformedRequest);
+        };
 
+        let mut headers = Vec::new();
+        while let Some(line) = lines.next().transpose().map_err(|_| ParseError::NotEnoughBytes)? {
+            if line.is_empty() { break; }
+
+            let h = line.split_once(": ")
+                .ok_or(ParseError::NotEnoughBytes)?;
+
+            if h.1.trim().is_empty() {
+                return Err(ParseError::NotEnoughBytes);
+            }
+
+            headers.push((
+                h.0.to_string(),
+                h.1.to_string(),
+            ));
+        }
+
+        for (key, value) in headers {
             request = request.header(key, value);
         }
 
-        request
-            .body(body.to_string())
-            .map_err(|_| ParseError::InvalidRequestParts)
+        let body = bytes[separator + 4..].to_vec();
+        request.body(body).map_err(|_| ParseError::InvalidRequestParts)
     }
 }
+
 
 fn parse_response_line_into_buf<T>(
     buf: &mut Vec<u8>,
@@ -105,11 +140,11 @@ fn parse_response_line_into_buf<T>(
     )?;
 
     for (key, value) in request.headers() {
-        buf.write(key.as_str().as_bytes())?;
+        let _ = buf.write(key.as_str().as_bytes())?;
 
         write!(buf, ": ")?;
 
-        buf.write(value.as_bytes())?;
+        let _ = buf.write(value.as_bytes())?;
 
         write!(buf, "\r\n")?;
     }
@@ -130,11 +165,12 @@ where
     fn into_bytes(self) -> Vec<u8> {
         let mut buf = vec![];
 
+        // FIXME idk about not checking result
         let _ = parse_response_line_into_buf(&mut buf, &self);
 
         let _ = write!(buf, "\r\n");
 
-        buf.extend_from_slice(self.map(|f| f.into_raw_bytes()).body());
+        buf.extend_from_slice(self.map(IntoRawBytes::into_raw_bytes).body());
 
         buf
     }
@@ -183,6 +219,6 @@ where
     }
 
     fn into_raw_response(self) -> RawResponse {
-        self.map(|f| f.into_raw_bytes())
+        self.map(IntoRawBytes::into_raw_bytes)
     }
 }

@@ -33,7 +33,7 @@ impl MaybeIntoResponse for () {
 
 impl<T> MaybeIntoResponse for Option<T> where T: MaybeIntoResponse {
     fn maybe_response(self) -> Option<RawResponse> {
-        self.map(|f| f.maybe_response()).flatten()
+        self.and_then(MaybeIntoResponse::maybe_response)
     }
 }
 
@@ -62,12 +62,12 @@ impl MaybeIntoResponse for u16 {
 
 impl<T> MaybeIntoResponse for Response<T> where T: IntoRawBytes {
     fn maybe_response(self) -> Option<RawResponse> {
-        Some(self.map(|f| f.into_raw_bytes()))
+        Some(self.map(IntoRawBytes::into_raw_bytes))
     }
 }
 
 
-/// ReoslveGuard is the expected return type of top level `Resolve`able objects. Only types that
+/// `ResolveGuard` is the expected return type of top level `Resolve`able objects. Only types that
 /// return `ResolveGuard` can be used as function parameters
 pub enum ResolveGuard<T> {
     /// Succesful value, run the system
@@ -183,4 +183,4 @@ macro_rules! all {
     }
 }
 
-all! { A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P }
+all! { A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P, Q }
