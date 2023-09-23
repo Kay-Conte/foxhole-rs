@@ -120,7 +120,7 @@ impl TaskPool {
 
     /// # Panics
     ///
-    /// Will panic if the mutex fails to lock
+    // FIXME kay add docs
     pub fn send_task(&mut self, task: Task) {
         self.shared.pool.lock().unwrap().push_back(task);
 

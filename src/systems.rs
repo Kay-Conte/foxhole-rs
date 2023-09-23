@@ -125,7 +125,6 @@ pub trait System<T> {
 }
 
 pub struct DynSystem {
-    #[allow(clippy::type_complexity)]
     inner: Box<dyn Fn(&mut Context) -> Option<RawResponse> + 'static + Send + Sync>,
 }
 
@@ -184,4 +183,4 @@ macro_rules! all {
     }
 }
 
-all! { A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P }
+all! { A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P, Q }
