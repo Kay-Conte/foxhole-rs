@@ -33,15 +33,15 @@ mod tests {
     use super::*;
 
     #[test]
-    fn insert_and_get() {
+    fn type_map() {
         let mut cache = TypeCache::new();
         
-        assert!(cache.get::<u32>().is_none());
-
         assert!(cache.insert::<u32>(0).is_none());
 
         assert!(cache.get::<u32>().is_some());
 
-        assert!(cache.insert::<u32>(0).is_some())
+        assert!(cache.insert::<u32>(0).is_some());
+
+        assert!(cache.remove::<u32>().is_some());
     }
 }
