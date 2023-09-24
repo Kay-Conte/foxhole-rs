@@ -10,4 +10,5 @@ categories = ["web-programming::http-server", "web-programming"]
 [dependencies]
 http = "0.2.9"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[dev-dependencies]
+rand = "0.8.5"

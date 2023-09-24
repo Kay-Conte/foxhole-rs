@@ -227,3 +227,62 @@ where
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rand::Rng;
+
+    #[test]
+    fn req_headers_parsing_1() {
+        let bytes = br#"POST /api/send-data HTTP/1.1\r\nHost: example.com\r\nUser-Agent: My-HTTP-Client/1.0\r\nAccept: application/json\r\nContent-Type: application/json\r\nContent-Length: 87\r\nAuthorization: 82u27ydcfkjegh8jndnkzJJFFJRGHN\r\n\r\n{"user_id":12345, "event_type":"page_view","timestamp":"2023-09-23T15:30:00Z","data":{"page_url":"https://example.com/some-page","user_agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36","referrer":"https://google.com/search?q=example","browser_language":"en-US","device_type":"desktop"}}"#
+
+        let req = Request::try_headers_from_bytes(bytes);`
+        assert!(req.is_ok());
+
+        let req = req.unwrap();
+        assert_eq!(req.method, Method::POST);
+        assert_eq!(req.path, "/api/send-data");
+        assert_eq!(req.version, Version::HTTP_1_1);
+        assert_eq!(req.headers.len(), 6);
+        assert_eq!(req.headers.get("Host"), Some("example.com"));
+        assert_eq!(req.headers.get("User-Agent"), Some("My-HTTP-Client/1.0"));
+        assert_eq!(req.headers.get("Accept"), Some("application/json"));
+        assert_eq!(req.headers.get("Content-Type"), Some("application/json"));
+        assert_eq!(req.headers.get("Content-Length"), Some("87"));
+    }
+
+    #[test]
+    fn req_headers_parsing_2() {
+        let mut bytes = [0; 4096];
+        rand::thread_rng().fill_bytes(&mut bytes);
+
+        assert!(Request::try_headers_from_bytes(&bytes[..]).is_err());
+    }
+
+    // tests invalid protocol version
+    #[test]
+    fn resp_headers_parsing_3() {
+        let bytes = b"HTTP/1.32 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: 123\r\n\r\n";
+
+        let resp = Response::try_headers_from_bytes(bytes);
+        assert_eq!(resp, Err(ParseError::InvalidProtocolVer)));
+    }
+
+    // tests invalid header
+    #[test]
+    fn resp_headers_parsing_4() {
+        let bytes = b"HTTP/1.1 200 22 3jklajs OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: 123\r\n\r\n";
+
+        let resp = Response::try_headers_from_bytes(bytes);
+        assert_eq!(resp, Err(ParseError::MalformedRequest));
+    }
+
+    // missing first line
+    #[test]
+    fn resp_headers_parsing_5() {
+        let bytes = b"Content-Type: text/html; charset=utf-8\r\nContent-Length: 123\r\n\r\n";
+
+        let resp = Response::try_headers_from_bytes(bytes);
+        assert_eq!(resp, Err(ParseError::Incomplete));
+    }
+}
