@@ -134,14 +134,14 @@ impl TaskPool {
 }
 
 fn handle_connection(mut task: Task) {
-    let mut buf = vec![0; 1024];
+    let mut buf = vec![0; BUF_UNINIT_SIZE];
     let mut bytes_read: usize = 0;
 
     while let Ok(n) = task.stream.read(&mut buf[bytes_read..]) {
         if n == 0 {
             break;
         }
-        
+
         bytes_read += n;
 
         match Request::try_headers_from_bytes(&buf[..bytes_read]) {
@@ -150,10 +150,12 @@ fn handle_connection(mut task: Task) {
                 break;
             }
             Err(ParseError::Incomplete) => {
-                buf.resize(buf.len() + n, 0); 
+                buf.resize(buf.len() + n, 0);
                 continue;
             }
-            Err(_) => break,
+            Err(_) => {
+                break;
+            }
         }
     }
 }
@@ -182,7 +184,6 @@ fn handle_request(mut task: Task, request: Request<()>) {
                 return;
             }
         }
-
         let Some(next) = ctx.path_iter.next() else {
             break;
         };
@@ -194,3 +195,5 @@ fn handle_request(mut task: Task, request: Request<()>) {
         }
     }
 }
+
+
