@@ -11,6 +11,7 @@ impl IntoResponse for Html {
         let bytes = self.value.into_bytes();
 
         Response::builder()
+            .status(200)
             .header("Content-Type", "text/html; charset=utf-8")
             .header("Content-Length", format!("{}", bytes.len()))
             .body(bytes)
@@ -27,5 +28,5 @@ fn page(_get: Get) -> Html {
 fn main() {
     let router = Route::empty().route("page", Route::new(sys![page]));
 
-    run("0.0.0.0:5000", router);
+    run("127.0.0.1:5000", router);
 }

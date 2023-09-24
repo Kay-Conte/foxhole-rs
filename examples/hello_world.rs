@@ -11,8 +11,10 @@ fn get(_get: Get) -> Response<String> {
 }
 
 fn main() {
-    let addr = "127.0.0.1:8080";
     let router = Route::new(sys![get]);
 
-    run(addr, router);
+    println!("Running on '127.0.0.1:5000'. Try connecting using a browser!");
+
+    run("127.0.0.1:5000", router);
+
 }
