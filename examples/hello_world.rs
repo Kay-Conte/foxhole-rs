@@ -2,6 +2,8 @@ use vegemite::{run, sys, Get, Route};
 use http::Response;
 
 fn get(_get: Get) -> Response<String> {
+    println!("Hello World");
+
     let body = "<h1>Hello World</h1>";
 
     Response::builder()

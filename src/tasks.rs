@@ -14,18 +14,25 @@ use http::Request;
 
 use crate::{
     http_utils::{ParseError, RequestFromBytes, ResponseToBytes},
-    routing::Route,
+    routing::Route, type_cache::{SharedTypeCache, TypeCache},
 };
 
 const MIN_THREADS: usize = 4;
 const BUF_UNINIT_SIZE: usize = 1024;
 
 pub struct Task {
+    /// An application global type cache
+    pub cache: SharedTypeCache,
+
     pub stream: TcpStream,
+    
+    /// A handle to the applications router tree
     pub router: Arc<Route>,
 }
 
 pub struct Context<'a, 'b> {
+    pub global_cache: SharedTypeCache,
+    pub local_cache: TypeCache,
     pub request: Request<&'b TcpStream>,
     pub path_iter: Split<'a, &'static str>,
 }
@@ -170,6 +177,8 @@ fn handle_request(mut task: Task, request: Request<()>) {
     path_iter.next();
 
     let mut ctx = Context {
+        global_cache: task.cache.clone(),
+        local_cache: TypeCache::new(),
         request: request.map(|_| &task.stream),
         path_iter,
     };
@@ -197,5 +206,3 @@ fn handle_request(mut task: Task, request: Request<()>) {
         }
     }
 }
-
-

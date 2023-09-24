@@ -3,7 +3,7 @@
 
 use http::{Request, Response, StatusCode, Version};
 
-use std::io::{Write, BufReader, BufRead};
+use std::io::{Write, BufRead};
 
 use crate::systems::RawResponse;
 
@@ -106,6 +106,10 @@ impl<'a> RequestFromBytes<'a> for Request<&'a [u8]> {
             return Err(ParseError::Incomplete);
         };
         
+        if parts.next().is_some() {
+            return Err(ParseError::MalformedRequest);
+        }
+
         let mut req = Request::builder()
             .method(method)
             .uri(uri)

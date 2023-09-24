@@ -21,7 +21,7 @@
 //! 
 //! vegemite uses a set of handler systems and routing modules to handle requests and responses. 
 //! Here's a starting example of a Hello World server.
-//! ```rust
+//! ```no_run
 //! use vegemite::{run, sys, Get, Route, Response};
 //! 
 //! fn get(_get: Get) -> Response<String> {
@@ -43,7 +43,7 @@
 //! # Benchmarks
 //! These were run on a AMD Ryzen 7 5700X 3.4GHz with 32GB of RAM.  
 //! ### Vegemite:
-//! ```
+//! ```not_rust
 //! $ wrk -t12 -c400 -d30s -H"Connection: close" http://localhost:5000
 //! Running 10s test @ http://localhost:5000
 //!   12 threads and 400 connections
@@ -56,7 +56,7 @@
 //! ```
 //! 
 //! ### Actix:
-//! ```
+//! ```not_rust
 //! $ wrk -t12 -c400 -d30s -H"Connection: close" http://localhost:5000
 //! Running 10s test @ http://localhost:8080
 //!   12 threads and 400 connections
@@ -69,7 +69,7 @@
 //! ```
 //! 
 //! ### Axum: not sure why the errors on "Connection: close"
-//! ```
+//! ```not_rust
 //! $ wrk -t12 -c400 -d30s -H"Connection: close" http://localhost:5000
 //! Running 10s test @ http://localhost:8080
 //!   12 threads and 400 connections
@@ -94,11 +94,12 @@ pub mod macros;
 pub mod routing;
 pub mod systems;
 pub mod tasks;
+pub mod type_cache;
 
 pub use framework::run;
 pub use routing::Route;
 pub use systems::{Resolve, ResolveGuard, MaybeIntoResponse, IntoResponse, Get, Post};
 pub use tasks::Context;
 
-pub use http::{Response, Request};
 pub use http;
+pub use http::{Response, Request};
