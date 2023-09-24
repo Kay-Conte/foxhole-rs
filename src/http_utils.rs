@@ -106,6 +106,10 @@ impl<'a> RequestFromBytes<'a> for Request<&'a [u8]> {
             return Err(ParseError::Incomplete);
         };
         
+        if parts.next().is_some() {
+            return Err(ParseError::MalformedRequest);
+        }
+
         let mut req = Request::builder()
             .method(method)
             .uri(uri)
