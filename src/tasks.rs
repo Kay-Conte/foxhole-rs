@@ -14,7 +14,7 @@ use http::Request;
 
 use crate::{
     http_utils::{ParseError, RequestFromBytes, ResponseToBytes},
-    routing::Route, type_cache::{SharedTypeCache, TypeCache},
+    routing::Route, type_cache::{TypeCacheShared, TypeCache},
 };
 
 const MIN_THREADS: usize = 4;
@@ -22,7 +22,7 @@ const BUF_UNINIT_SIZE: usize = 1024;
 
 pub struct Task {
     /// An application global type cache
-    pub cache: SharedTypeCache,
+    pub cache: TypeCacheShared,
 
     pub stream: TcpStream,
     
@@ -31,7 +31,7 @@ pub struct Task {
 }
 
 pub struct Context<'a, 'b> {
-    pub global_cache: SharedTypeCache,
+    pub global_cache: TypeCacheShared,
     pub local_cache: TypeCache,
     pub request: Request<&'b TcpStream>,
     pub path_iter: Split<'a, &'static str>,

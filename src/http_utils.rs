@@ -144,7 +144,7 @@ fn parse_response_line_into_buf<T>(
         buf,
         "{} {} \r\n",
         request.version().to_string(),
-        request.status().to_string()
+        request.status()
     )?;
 
     for (key, value) in request.headers() {

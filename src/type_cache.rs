@@ -2,8 +2,9 @@ use std::{collections::HashMap, any::{TypeId, Any}, sync::{Arc, RwLock}};
 
 type Value = Box<dyn Any + Sync + Send>;
 
-pub type SharedTypeCache = Arc<RwLock<TypeCache>>;
+pub type TypeCacheShared = Arc<RwLock<TypeCache>>;
 
+#[derive(Default)]
 pub struct TypeCache {
     inner: HashMap<TypeId, Value>,
 }
