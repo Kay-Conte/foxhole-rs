@@ -2,12 +2,12 @@
 
 use std::{
     net::{TcpListener, ToSocketAddrs},
-    sync::Arc,
+    sync::{Arc, RwLock},
 };
 
 use crate::{
     routing::Route,
-    tasks::{Task, TaskPool},
+    tasks::{Task, TaskPool}, type_cache::TypeCache, 
 };
 
 /// Application entry point. Call this function to run your application.
@@ -18,8 +18,10 @@ where
     let incoming = TcpListener::bind(address).expect("Could not bind to local address");
 
     let router = Arc::new(router);
+    let type_cache = Arc::new(RwLock::new(TypeCache::new()));
 
     let mut pool = TaskPool::new();
+
 
     loop {
         let Ok((stream, _addr)) = incoming.accept() else {
@@ -27,6 +29,7 @@ where
         };
 
         let task = Task {
+            cache: type_cache.clone(),
             stream,
             router: router.clone(),
         };
