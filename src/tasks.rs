@@ -6,26 +6,28 @@ use std::{
     sync::{
         atomic::{AtomicUsize, Ordering},
         Arc, Condvar, Mutex,
-    }, time::Duration,
+    },
+    time::Duration,
 };
 
 use http::Request;
 
 use crate::{
-    http_utils::{RequestFromBytes, ResponseToBytes, ParseError},
+    http_utils::{ParseError, RequestFromBytes, ResponseToBytes},
     routing::Route,
 };
 
 const MIN_THREADS: usize = 4;
+const BUF_UNINIT_SIZE: usize = 1024;
 
 pub struct Task {
     pub stream: TcpStream,
     pub router: Arc<Route>,
 }
 
-pub struct Context<'b> {
-    pub request: Request<Vec<u8>>,
-    pub path_iter: Split<'b, &'static str>,
+pub struct Context<'a, 'b> {
+    pub request: Request<&'b TcpStream>,
+    pub path_iter: Split<'a, &'static str>,
 }
 
 struct Shared {
@@ -77,12 +79,9 @@ impl TaskPool {
         pool
     }
 
-    /// # Panics
-    ///
-    /// Will panic if IDK
-    // FIXME turnipper fix the documentation above
-    pub fn spawn_thread(&mut self, should_cull: bool) {
-
+    /// Spawns a thread on the task pool. This function will panic on poisoned `Mutex` This will
+    /// likely remain until there is a graceful shutdown mechanism
+    fn spawn_thread(&mut self, should_cull: bool) {
         let shared = self.shared.clone();
 
         std::thread::spawn(move || {
@@ -92,9 +91,13 @@ impl TaskPool {
                 shared.waiting();
 
                 if should_cull {
-                    let (new, timeout) = shared.condvar.wait_timeout(pool, Duration::from_secs(5)).unwrap();
+                    let (new, timeout) = shared
+                        .condvar
+                        .wait_timeout(pool, Duration::from_secs(5))
+                        .unwrap();
 
                     if timeout.timed_out() {
+                        // Make sure not to bloat waiting count
                         shared.release();
 
                         return;
@@ -118,9 +121,8 @@ impl TaskPool {
         });
     }
 
-    /// # Panics
-    ///
-    // FIXME kay add docs
+    /// This function can panic if the mutex is poisoned. Mutex poisoning will likely remain
+    /// unhandled in the foreseeable future until a graceful shutdown mechanism is provided.
     pub fn send_task(&mut self, task: Task) {
         self.shared.pool.lock().unwrap().push_back(task);
 
@@ -133,38 +135,44 @@ impl TaskPool {
 }
 
 fn handle_connection(mut task: Task) {
-    // let mut buf: [u8; 1024] = [0; 1024]
-    let mut buf = Vec::with_capacity(1024);
+    let mut buf = vec![0; BUF_UNINIT_SIZE];
     let mut bytes_read: usize = 0;
 
     while let Ok(n) = task.stream.read(&mut buf[bytes_read..]) {
-        if n == 0 { break; }
+        if n == 0 {
+            break;
+        }
 
-        match Request::try_from_bytes(&buf[..bytes_read]) {
+        bytes_read += n;
+
+        match Request::try_headers_from_bytes(&buf[..bytes_read]) {
             Ok(req) => {
                 handle_request(task, req);
                 break;
-            },
-            Err(ParseError::NotEnoughBytes) => {
-                bytes_read += n;
-                buf.resize(bytes_read + n, 0);
+            }
+            Err(ParseError::Incomplete) => {
+                buf.resize(buf.len() + n, 0);
                 continue;
-            },
-            Err(_) => break,
+            }
+            Err(_) => {
+                break;
+            }
         }
     }
 }
 
-fn handle_request(mut task: Task, request: Request<Vec<u8>>) {
+fn handle_request(mut task: Task, request: Request<()>) {
     let path = request.uri().path().to_string();
 
     #[allow(clippy::single_char_pattern)]
     let mut path_iter = path.split("/");
 
-    // Discard first in iter as it will always be an empty string
     path_iter.next();
 
-    let mut ctx = Context { request, path_iter };
+    let mut ctx = Context {
+        request: request.map(|_| &task.stream),
+        path_iter,
+    };
 
     let mut cursor = task.router.as_ref();
 
@@ -178,7 +186,6 @@ fn handle_request(mut task: Task, request: Request<Vec<u8>>) {
                 return;
             }
         }
-
         let Some(next) = ctx.path_iter.next() else {
             break;
         };
@@ -190,3 +197,5 @@ fn handle_request(mut task: Task, request: Request<Vec<u8>>) {
         }
     }
 }
+
+

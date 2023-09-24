@@ -1,19 +1,24 @@
 //! This module provides http utility traits and functions for parsing and handling Requests and
 //! Responses
 
-use http::{Request, Version, Response, StatusCode};
+use http::{Request, Response, StatusCode, Version};
 
 use std::io::{Write, BufReader, BufRead};
 
 use crate::systems::RawResponse;
 
 #[derive(Debug)]
+/// Errors while parsing requests. 
 pub enum ParseError {
     MalformedRequest,
+
     InvalidMethod,
     InvalidProtocolVer,
     InvalidRequestParts,
-    NotEnoughBytes,
+
+    /// `Incomplete` should be returned in any case that reading more bytes *may* make the request
+    /// valid.
+    Incomplete,
 }
 
 impl std::fmt::Display for ParseError {
@@ -21,7 +26,7 @@ impl std::fmt::Display for ParseError {
         match self {
             ParseError::InvalidProtocolVer => write!(f, "Invalid Protocol"),
             ParseError::MalformedRequest => write!(f, "Malformed Request"),
-            ParseError::NotEnoughBytes => write!(f, "Not Enough Bytes"),
+            ParseError::Incomplete => write!(f, "Not Enough Bytes"),
             ParseError::InvalidMethod => write!(f, "Invalid Method"),
             ParseError::InvalidRequestParts => write!(f, "Invalid Request Parts"),
         }
@@ -63,72 +68,80 @@ impl VersionExt for Version {
     }
 }
 
+fn validate_method(method: &str) -> bool {
+    matches!(method, "GET" | "POST" | "PUT" | "DELETE" | "HEAD" | "OPTIONS" | "CONNECT" | "TRACE" | "PATH")
+} 
+
 pub trait RequestFromBytes<'a> {
     /// # Errors
     ///
     /// Returns `Err` if the bytes are not a valid HTTP request
-    fn try_from_bytes(bytes: &[u8]) -> Result<Request<Vec<u8>>, ParseError>;
+    fn try_headers_from_bytes(bytes: &[u8]) -> Result<Request<()>, ParseError>;
 }
 
 /// the entirety of the header must be valid utf8
 impl<'a> RequestFromBytes<'a> for Request<&'a [u8]> {
-    fn try_from_bytes(bytes: &[u8]) -> Result<Request<Vec<u8>>, ParseError> {
-        let separator = bytes.windows(4).position(|w| w == b"\r\n\r\n")
-            .ok_or(ParseError::MalformedRequest)?;
+    fn try_headers_from_bytes(bytes: &[u8]) -> Result<Request<()>, ParseError> {
+        let mut lines = bytes.lines();
 
-        let mut lines = BufReader::new(&bytes[..separator]).lines();
-
-        let mut request = if let Some(Ok(line)) = lines.next() {
-            let h: Vec<&str> = line.split(' ').collect();
-
-            if h.len() != 3 { 
-                return Err(ParseError::MalformedRequest); 
-            }
-            
-            let method = match h[0] {
-                "GET" | "POST" | "PUT" | "DELETE" | "HEAD" | "OPTIONS" | "CONNECT" | "TRACE" | "PATH" 
-                    => h[0],
-                _ => return Err(ParseError::InvalidMethod),
-            };
-
-            Request::builder()
-                .method(method)
-                .uri(h[1])
-                .version(Version::parse_version(h[2])?)
-        }
-
-        else {
-            return Err(ParseError::MalformedRequest);
+        let Some(Ok(line)) = lines.next() else {
+           return Err(ParseError::Incomplete);
         };
 
-        let mut headers = Vec::new();
-        while let Some(line) = lines.next().transpose().map_err(|_| ParseError::NotEnoughBytes)? {
+        let mut parts = line.split(' ');
+
+        let Some(method) = parts.next() else {
+            return Err(ParseError::Incomplete);
+        };
+        
+        if !validate_method(method) {
+            return Err(ParseError::InvalidMethod);
+        }
+
+        let Some(uri) = parts.next() else {
+            return Err(ParseError::Incomplete);            
+        };
+
+        let Some(version) = parts.next() else {
+            return Err(ParseError::Incomplete);
+        };
+        
+        let mut req = Request::builder()
+            .method(method)
+            .uri(uri)
+            .version(Version::parse_version(version)?);
+
+        while let Some(line) = lines.next().transpose().map_err(|_| ParseError::Incomplete)? {
             if line.is_empty() { break; }
 
             let h = line.split_once(": ")
-                .ok_or(ParseError::NotEnoughBytes)?;
+                .ok_or(ParseError::Incomplete)?;
 
-            if h.1.trim().is_empty() {
-                return Err(ParseError::NotEnoughBytes);
+            if h.1.is_empty() {
+                return Err(ParseError::Incomplete);
             }
 
-            headers.push((
-                h.0.to_string(),
-                h.1.to_string(),
-            ));
+            req = req.header(
+                h.0,
+                h.1,
+            );
         }
 
-        for (key, value) in headers {
-            request = request.header(key, value);
-        }
-
-        let body = bytes[separator + 4..].to_vec();
-        request.body(body).map_err(|_| ParseError::InvalidRequestParts)
+        req.body(()).map_err(|_| ParseError::MalformedRequest)
     }
 }
 
-fn parse_response_line_into_buf<T>(buf: &mut Vec<u8>, request: &Response<T>) -> Result<(), std::io::Error> {
-    write!(buf, "{} {} \r\n", request.version().to_string(), request.status())?;
+
+fn parse_response_line_into_buf<T>(
+    buf: &mut Vec<u8>,
+    request: &Response<T>,
+) -> Result<(), std::io::Error> {
+    write!(
+        buf,
+        "{} {} \r\n",
+        request.version().to_string(),
+        request.status().to_string()
+    )?;
 
     for (key, value) in request.headers() {
         let _ = buf.write(key.as_str().as_bytes())?;
@@ -138,7 +151,7 @@ fn parse_response_line_into_buf<T>(buf: &mut Vec<u8>, request: &Response<T>) -> 
         let _ = buf.write(value.as_bytes())?;
 
         write!(buf, "\r\n")?;
-    } 
+    }
 
     write!(buf, "\r\n")?;
 
@@ -146,10 +159,13 @@ fn parse_response_line_into_buf<T>(buf: &mut Vec<u8>, request: &Response<T>) -> 
 }
 
 pub trait ResponseToBytes {
-    fn into_bytes(self) -> Vec<u8>; 
+    fn into_bytes(self) -> Vec<u8>;
 }
 
-impl<T> ResponseToBytes for Response<T> where T: IntoRawBytes {
+impl<T> ResponseToBytes for Response<T>
+where
+    T: IntoRawBytes,
+{
     fn into_bytes(self) -> Vec<u8> {
         let mut buf = vec![];
 
@@ -194,7 +210,10 @@ pub trait ResponseExt: Sized {
     fn into_raw_response(self) -> RawResponse;
 }
 
-impl<T> ResponseExt for Response<T> where T: IntoRawBytes {
+impl<T> ResponseExt for Response<T>
+where
+    T: IntoRawBytes,
+{
     fn base(code: StatusCode) -> Response<()> {
         Response::builder().status(code).body(()).unwrap()
     }
@@ -207,3 +226,4 @@ impl<T> ResponseExt for Response<T> where T: IntoRawBytes {
         self.map(IntoRawBytes::into_raw_bytes)
     }
 }
+
