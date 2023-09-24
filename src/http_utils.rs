@@ -3,7 +3,7 @@
 
 use http::{Request, Response, StatusCode, Version};
 
-use std::io::{Write, BufReader, BufRead};
+use std::io::{Write, BufRead};
 
 use crate::systems::RawResponse;
 
