@@ -25,8 +25,13 @@ fn page(_get: Get) -> Html {
     }
 }
 
+fn favicon(_get: Get) -> u16 {
+    println!("No favicon yet :C");
+    404
+}
+
 fn main() {
-    let router = Route::empty().route("page", Route::new(sys![page]));
+    let router = Route::empty().route("favicon.ico", Route::new(sys![favicon])).route("page", Route::new(sys![page]));
 
     run("127.0.0.1:5000", router);
 }

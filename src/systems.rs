@@ -165,7 +165,6 @@ macro_rules! system {
                 let r = self($($x,)*);
 
                 r.maybe_response()
-
             }
         }
     }
