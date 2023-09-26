@@ -14,18 +14,21 @@ use http::Request;
 
 use crate::{
     http_utils::{ParseError, RequestFromBytes, ResponseToBytes},
-    routing::Route, type_cache::{TypeCacheShared, TypeCache},
+    routing::Route,
+    type_cache::{TypeCache, TypeCacheShared},
+    MaybeIntoResponse,
 };
 
 const MIN_THREADS: usize = 4;
 const BUF_UNINIT_SIZE: usize = 1024;
+const TIMEOUT: u64 = 5;
 
 pub struct Task {
     /// An application global type cache
     pub cache: TypeCacheShared,
 
     pub stream: TcpStream,
-    
+
     /// A handle to the applications router tree
     pub router: Arc<Route>,
 }
@@ -85,8 +88,14 @@ impl TaskPool {
         pool
     }
 
-    /// Spawns a thread on the task pool. This function will panic on poisoned `Mutex` This will
+    /// Spawns a thread on the task pool.
+    ///
+    /// # Panics
+    ///
+    /// This function will panic on poisoned `Mutex`. This will
     /// likely remain until there is a graceful shutdown mechanism
+    ///
+    /// This function can also panic on 0 duration.
     fn spawn_thread(&mut self, should_cull: bool) {
         let shared = self.shared.clone();
 
@@ -116,17 +125,25 @@ impl TaskPool {
 
                 shared.release();
 
-                let Some(task) = pool.pop_front() else {
+                let Some(mut task) = pool.pop_front() else {
                     continue;
                 };
 
                 drop(pool);
 
-                handle_connection(task);
+                task.stream.set_read_timeout(Some(Duration::from_secs(TIMEOUT))).expect("Shouldn't fail unless duration is 0");  
+
+                while let Some(new_task) = handle_connection(task) {
+                    task = new_task
+                }
             }
         });
     }
 
+    /// Adds a task to the task pool and spawns a thread if there is none available
+    ///
+    /// # Panics
+    ///
     /// This function can panic if the mutex is poisoned. Mutex poisoning will likely remain
     /// unhandled in the foreseeable future until a graceful shutdown mechanism is provided.
     pub fn send_task(&mut self, task: Task) {
@@ -140,34 +157,35 @@ impl TaskPool {
     }
 }
 
-fn handle_connection(mut task: Task) {
+fn handle_connection(mut task: Task) -> Option<Task> {
     let mut buf = vec![0; BUF_UNINIT_SIZE];
     let mut bytes_read: usize = 0;
 
     while let Ok(n) = task.stream.read(&mut buf[bytes_read..]) {
         if n == 0 {
-            break;
+            return None;
         }
 
         bytes_read += n;
 
         match Request::try_headers_from_bytes(&buf[..bytes_read]) {
             Ok(req) => {
-                handle_request(task, req);
-                break;
+                return handle_request(task, req);
             }
             Err(ParseError::Incomplete) => {
                 buf.resize(buf.len() + n, 0);
                 continue;
             }
             Err(_) => {
-                break;
+                return None;
             }
         }
     }
+
+    None
 }
 
-fn handle_request(mut task: Task, request: Request<()>) {
+fn handle_request(mut task: Task, request: Request<()>) -> Option<Task> {
     let path = request.uri().path().to_string();
 
     let mut path_iter = path.split("/");
@@ -183,17 +201,22 @@ fn handle_request(mut task: Task, request: Request<()>) {
 
     let mut cursor = task.router.as_ref();
 
-    loop {
+    'outer: loop {
         for system in cursor.systems() {
             if let Some(r) = system.call(&mut ctx) {
-                let _ = task.stream.write_all(&r.into_bytes());
+                let _ = (&task.stream).write_all(&r.into_bytes());
 
-                let _ = task.stream.flush();
+                let _ = (&task.stream).flush();
 
-                return;
+                break 'outer;
             }
         }
+
         let Some(next) = ctx.path_iter.next() else {
+            let _ = (&task.stream).write_all(&404u16.maybe_response().unwrap().into_bytes());
+
+            let _ = (&task.stream).flush();
+
             break;
         };
 
@@ -202,5 +225,17 @@ fn handle_request(mut task: Task, request: Request<()>) {
         } else {
             break;
         }
+    }
+
+    if ctx
+        .request
+        .headers()
+        .iter()
+        .find(|h| h.0 == "Connection" && h.1 == "keep-alive")
+        .is_some()
+    {
+        Some(task)
+    } else {
+        None
     }
 }
