@@ -119,10 +119,10 @@ impl<'a> RequestFromBytes<'a> for Request<&'a [u8]> {
             if line.is_empty() { break; }
 
             let h = line.split_once(": ")
-                .ok_or(ParseError::Incomplete)?;
+                .ok_or(ParseError::MalformedRequest)?;
 
             if h.1.is_empty() {
-                return Err(ParseError::Incomplete);
+                return Err(ParseError::MalformedRequest);
             }
 
             req = req.header(
@@ -239,9 +239,10 @@ mod tests {
 
     #[test]
     fn sanity_check() {
-        let bytes = br#"POST /api/send-data HTTP/1.1\r\nHost: example.com\r\nUser-Agent: My-HTTP-Client/1.0\r\nAccept: application/json\r\nContent-Type: application/json\r\nContent-Length: 87\r\nAuthorization: 82u27ydcfkjegh8jndnkzJJFFJRGHN\r\n\r\n{"user_id":12345, "event_type":"page_view","timestamp":"2023-09-23T15:30:00Z","data":{"page_url":"https://example.com/some-page","user_agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36","referrer":"https://google.com/search?q=example","browser_language":"en-US","device_type":"desktop"}}"#;
+        let bytes = b"POST /api/send-data HTTP/1.1\r\nHost: example.com\r\nUser-Agent: My-HTTP-Client/1.0\r\nAccept: application/json\r\nContent-Type: application/json\r\nContent-Length: 87\r\nAuthorization: 82u27ydcfkjegh8jndnkzJJFFJRGHN\r\n\r\n{\"user_id\":12345, \"event_type\":\"page_view\",\"timestamp\":\"2023-09-23T15:30:00Z\",\"data\":{\"page_url\":\"https://example.com/some-page\",\"user_agent\":\"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36\",\"referrer\":\"https://google.com/search?q=example\",\"browser_language\":\"en-US\",\"device_type\":\"desktop\"}}";
 
         let req = Request::try_headers_from_bytes(bytes);
+        println!("{:?}", req);
         assert!(req.is_ok());
 
         let req = req.unwrap();
@@ -297,56 +298,75 @@ mod tests {
     }
 
     #[test]
-    fn missing_first_line() {
-        let bytes = b"Content-Type: text/html; charset=utf-8\r\nContent-Length: 123\r\n\r\n";
-
-        let resp = Request::try_headers_from_bytes(bytes);
-        assert!(matches!(resp, Err(ParseError::Incomplete)));
-    }
-
-    #[test]
     fn invalid_method() {
         let bytes = b"BAKLAVA / HTTP/1.1\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: 123\r\n\r\n";
 
         let resp = Request::try_headers_from_bytes(bytes);
         assert!(matches!(resp, Err(ParseError::InvalidMethod)));
+
+        // missing method
+        let bytes = b"Content-Type: text/html; charset=utf-8\r\nContent-Length: 123\r\n\r\n";
+        let resp = Request::try_headers_from_bytes(bytes);
+        assert!(matches!(resp, Err(ParseError::InvalidMethod)));
     }
 
     #[test]
-    fn not_enough_bytes() {
+    fn not_enough_bytes() {  // these should all return Incomplete
+        // incomplete method
         let bytes = b"GET / HT";
         let resp = Request::try_headers_from_bytes(bytes);
+        // FIXME returns InvalidProtocolVer
         assert!(matches!(resp, Err(ParseError::Incomplete)));
 
+        // incomplete header field
         let bytes = b"GET / HTTP/1.1\r\nContent-Type: tex";
         let resp = Request::try_headers_from_bytes(bytes);
-        assert!(matches!(resp, Err(ParseError::Incomplete)));
-
-        let bytes = b"GET / HTTP/1.1\r\nContent-Type: text/html; charset=utf-8\r\n\n";
-        let resp = Request::try_headers_from_bytes(bytes);
+        // FIXME returns Ok
         assert!(matches!(resp, Err(ParseError::Incomplete)));
 
         let bytes = b"GET / HTTP/1.1\r\nContent-Type: ";
         let resp = Request::try_headers_from_bytes(bytes);
+        // FIXME returns malformed
+        assert!(matches!(resp, Err(ParseError::Incomplete)));
+
+        // incomplete header key
+        let bytes = b"GET / HTTP/1.1\r\nContent-Type: \r\nContent-L";
+        let resp = Request::try_headers_from_bytes(bytes);
         assert!(matches!(resp, Err(ParseError::Incomplete)));
     }
 
     #[test]
+    fn unicode_in_request() {
+        let bytes = b"GET / HTTP/1.1\r\nContent-Type: \xE2\xA1\x91\xE2\xB4\x9D\xE2\x9B\xB6\r\nContent-Length: 123\r\n\r\n";
+        let resp = Request::try_headers_from_bytes(bytes);
+        assert!(resp.is_ok());
+    }
+
+    #[test]
     fn malformed_request() {
+        // missing header field
         let bytes = b"GET / HTTP/1.1\r\nContent-Type: \r\nContent-Length: 123\r\n\r\n";
         let resp = Request::try_headers_from_bytes(bytes);
-        assert!(matches!(resp, Err(ParseError::Incomplete)));
+        assert!(matches!(resp, Err(ParseError::MalformedRequest)));
 
-        let bytes = b"GET / HTTP/1.1\r\nContent-Type: text/html; charset=utf-8\r\nContent-Len\r\n\r\n";
+        // incomplete header key
+        let bytes = b"GET / HTTP/1.1\r\nCey: text/html; charset=utf-8\r\nContent-Len\r\n\r\n";
         let resp = Request::try_headers_from_bytes(bytes);
-        assert!(matches!(resp, Err(ParseError::Incomplete)));
+        assert!(matches!(resp, Err(ParseError::MalformedRequest)));
 
         let bytes = b"GET / HTTP/1.1\r\nContent-Type: text/html; charset=utf-8\rContent-Length: 123\r\n\r\n";
         let resp = Request::try_headers_from_bytes(bytes);
         assert!(matches!(resp, Err(ParseError::MalformedRequest)));
 
+        // missing separator
+        let bytes = b"GET / HTTP/1.1\r\nContent-Type: text/html; charset=utf-8\r\n\n";
+        let resp = Request::try_headers_from_bytes(bytes);
+        // FIXME returns Ok
+        assert!(matches!(resp, Err(ParseError::MalformedRequest)));
+
         let bytes = b"GET / HTTP/1.1\r\nContent-Type: text/html; charset=utf-8\nContent-Length: 123\r\n\r\n";
         let resp = Request::try_headers_from_bytes(bytes);
+        // FIXME returns Ok
         assert!(matches!(resp, Err(ParseError::MalformedRequest)));
     }
 
