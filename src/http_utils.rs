@@ -176,8 +176,6 @@ where
         // FIXME idk about not checking result
         let _ = parse_response_line_into_buf(&mut buf, &self);
 
-        let _ = write!(buf, "\r\n");
-
         buf.extend_from_slice(self.map(IntoRawBytes::into_raw_bytes).body());
 
         buf
