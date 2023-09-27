@@ -39,3 +39,12 @@ impl Route {
         self.children.get(path)
     }
 }
+
+#[cfg(feature = "shuttle")]
+#[async_trait::async_trait]
+impl shuttle_service::Service for Route {
+    async fn bind(self, addr: std::net::SocketAddr) -> Result<(), shuttle_service::Error> {
+        crate::run(addr, self);
+        Ok(())
+    }
+}
