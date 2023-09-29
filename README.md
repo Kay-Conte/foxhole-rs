@@ -18,10 +18,13 @@
 Vegemite is Simple, Fast, and Aimed at allowing you finish your projects.
  
 # Features
-- Blazing fast performance, greater than [Axum](https://github.com/tokio-rs/axum) and [Actix](https://github.com/) for non keep-alive requests.
+- Blazing fast performance, greater than [Axum](https://github.com/tokio-rs/axum) and [Actix](https://github.com/) for non keep-alive requests. [#5](/../../issues/5)
 - Built-in threading system that allows you to efficiently handle requests.
 - Absolutely no async elements, improving ergonomics.
 - Minimal build size, 500kb when stripped.
+- Uses `http` a model library you may already be familiar with
+- Magic function handlers! See [Getting Started](#getting-started)
+- Unique routing system
  
 # Getting Started
 Add this to your cargo.toml
@@ -50,53 +53,73 @@ fn main() {
     run("127.0.0.1:8080", router);
 } 
 ```
+
+Let's break this down into its components.
+
+## Routing
+
+The router will step through the page by its parts, first starting with the route. It will try to run **all** systems of every node it steps through. Once a response is received it will stop stepping over the request. 
+
+lets assume we have the router `Route::new(sys![auth]).route("page", Route::new(sys![get_page]))` and the request `/page`
+
+In this example, we will first call `auth` if auth returns a response, say the user is not authorized and we would like to respond early, then we stop there. Otherwise we continue to the next node `get_page`
+
+If no responses are returned the server will automatically return `404`. This will be configuarable in the future.
+
+## Parameters/Guards
+
+Function parameters can act as both getters and guards in `vegemite`. 
+
+In the example above, `Get` acts as a guard to make sure the system is only run on `GET` requests. 
+
+Any type that implements the trait `Resolve<Output = ResolveGuard<Self>>` is viable to use as a parameter. 
+
+`vegemite` will try to provide the most common guards and getters you will use but few are implemented currenty.
+
+### Example
+```rs
+pub struct Get;
+
+impl Resolve for Get {
+    type Output = ResolveGuard<Self>;
+
+    fn resolve(ctx: &mut Context) -> Self::Output {
+        if ctx.request.method() == Method::GET {
+            ResolveGuard::Value(Get)
+        } else {
+            ResolveGuard::None
+        }
+    }
+}
+```
+
+## Return types
+
+Systems are required to return a value that implements `MaybeIntoResponse`. 
+
+Additionally note the existence of `IntoResponse` which auto impls `MaybeIntoResponse` for any types that *always* return a response. 
+
+If a type returns `None` out of `MaybeIntoResponse` a response will not be sent and routing will continue to further nodes.
+
+### Example
+```rs
+impl MaybeIntoResponse for u16 {
+    fn maybe_response(self) -> Option<RawResponse> {
+        Some(
+            Response::builder()
+                .version(Version::HTTP_10)
+                .status(self)
+                .header("Content-Type", "text/plain; charset=UTF-8")
+                .header("Content-Length", "0")
+                .body(Vec::new())
+                .expect("Failed to build request"),
+        )
+    }
+}
+```
  
 # Contributing
 Feel free to open an issue or pull request if you have suggestions for features or improvements!
- 
-# Benchmarks
-These were run on a AMD Ryzen 7 5700X 3.4GHz with 32GB of RAM.  
-### Vegemite:
-```
-$ wrk -t12 -c400 -d30s -H"Connection: close" http://localhost:5000
-Running 10s test @ http://localhost:5000
-  12 threads and 400 connections
-  Thread Stats   Avg      Stdev     Max   +/- Stdev
-    Latency     2.17ms   14.89ms 413.88ms   98.49%
-    Req/Sec     9.52k     1.51k   18.44k    70.11%
-  1138609 requests in 10.10s, 89.04MB read
-Requests/sec: 112731.16
-Transfer/sec:      8.82MB
-```
- 
-### Actix:
-```
-$ wrk -t12 -c400 -d30s -H"Connection: close" http://localhost:5000
-Running 10s test @ http://localhost:8080
-  12 threads and 400 connections
-  Thread Stats   Avg      Stdev     Max   +/- Stdev
-    Latency     1.96ms    2.23ms  38.95ms   89.66%
-    Req/Sec     8.89k     1.63k   16.29k    70.19%
-  1066903 requests in 10.10s, 150.59MB read
-Requests/sec: 105641.69
-Transfer/sec:     14.91MB
-```
- 
-### Axum:
-> **Note:**
-> No idea what's up with socket errors on `Connection: close`, but we were unable to fix em.
-```
-$ wrk -t12 -c400 -d30s -H"Connection: close" http://localhost:5000
-Running 10s test @ http://localhost:8080
-  12 threads and 400 connections
-  Thread Stats   Avg      Stdev     Max   +/- Stdev
-    Latency     3.28ms    1.58ms  57.66ms   94.89%
-    Req/Sec     8.72k   431.55    14.40k    83.93%
-  3129533 requests in 30.08s, 411.87MB read
-  Socket errors: connect 0, read 3129478, write 0, timeout 0
-Requests/sec: 104027.39
-Transfer/sec:     13.69MB
-```
  
 # License
 MIT license (LICENSE or https://opensource.org/licenses/MIT)
