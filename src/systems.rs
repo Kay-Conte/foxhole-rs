@@ -1,6 +1,6 @@
 use http::{Method, Response, Version};
 
-use crate::{tasks::Context, http_utils::IntoRawBytes};
+use crate::{tasks::RequestState, http_utils::IntoRawBytes};
 
 pub type RawResponse = Response<Vec<u8>>;
 
@@ -8,7 +8,7 @@ pub type RawResponse = Response<Vec<u8>>;
 pub trait Resolve: Sized {
     type Output;
 
-    fn resolve(ctx: &mut Context) -> Self::Output;
+    fn resolve(ctx: &mut RequestState) -> Self::Output;
 }
 
 pub trait IntoResponse {
@@ -95,7 +95,7 @@ pub struct Get;
 impl Resolve for Get {
     type Output = ResolveGuard<Self>;
 
-    fn resolve(ctx: &mut Context) -> Self::Output {
+    fn resolve(ctx: &mut RequestState) -> Self::Output {
         if ctx.request.method() == Method::GET {
             ResolveGuard::Value(Get)
         } else {
@@ -111,7 +111,7 @@ pub struct Post;
 impl Resolve for Post {
     type Output = ResolveGuard<Self>;
 
-    fn resolve(ctx: &mut Context) -> Self::Output {
+    fn resolve(ctx: &mut RequestState) -> Self::Output {
         if ctx.request.method() == Method::POST {
             ResolveGuard::Value(Post)            
         } else {
@@ -121,11 +121,11 @@ impl Resolve for Post {
 }
 
 pub trait System<T> {
-    fn run(self, ctx: &mut Context) -> Option<RawResponse>;
+    fn run(self, ctx: &mut RequestState) -> Option<RawResponse>;
 }
 
 pub struct DynSystem {
-    inner: Box<dyn Fn(&mut Context) -> Option<RawResponse> + 'static + Send + Sync>,
+    inner: Box<dyn Fn(&mut RequestState) -> Option<RawResponse> + 'static + Send + Sync>,
 }
 
 impl DynSystem {
@@ -138,7 +138,7 @@ impl DynSystem {
         }
     }
 
-    pub fn call(&self, ctx: &mut Context) -> Option<RawResponse> {
+    pub fn call(&self, ctx: &mut RequestState) -> Option<RawResponse> {
         (self.inner)(ctx)
     }
 }
@@ -152,7 +152,7 @@ macro_rules! system {
             R: MaybeIntoResponse,
         {
             #[allow(unused)]
-            fn run(self, ctx: &mut Context) -> Option<RawResponse> {
+            fn run(self, ctx: &mut RequestState) -> Option<RawResponse> {
 
                 
                 $(

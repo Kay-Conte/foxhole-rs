@@ -1,6 +1,4 @@
-use http::Response;
-
-use vegemite::{run, sys, Get, IntoResponse, Route};
+use vegemite::{run, sys, Get, IntoResponse, Route, Response};
 
 struct Html {
     value: String,
@@ -31,7 +29,7 @@ fn favicon(_get: Get) -> u16 {
 }
 
 fn main() {
-    let router = Route::empty().route("favicon.ico", Route::new(sys![favicon])).route("page", Route::new(sys![page]));
+    let router = Route::empty().route("favicon.ico", sys![favicon]).route("page", sys![page]);
 
     run("127.0.0.1:5000", router);
 }

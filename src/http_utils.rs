@@ -3,7 +3,7 @@
 
 use http::{Request, Response, StatusCode, Version};
 
-use std::{io::{Write, BufRead, BufReader, Lines}, net::TcpStream};
+use std::{io::{Write, BufReader, Lines}, net::TcpStream};
 
 use crate::systems::RawResponse;
 
@@ -15,10 +15,6 @@ pub enum ParseError {
     InvalidMethod,
     InvalidProtocolVer,
     InvalidRequestParts,
-
-    /// `Incomplete` should be returned in any case that reading more bytes *may* make the request
-    /// valid.
-    Incomplete,
 }
 
 impl std::fmt::Display for ParseError {
@@ -26,7 +22,6 @@ impl std::fmt::Display for ParseError {
         match self {
             ParseError::InvalidProtocolVer => write!(f, "Invalid Protocol"),
             ParseError::MalformedRequest => write!(f, "Malformed Request"),
-            ParseError::Incomplete => write!(f, "Not Enough Bytes"),
             ParseError::InvalidMethod => write!(f, "Invalid Method"),
             ParseError::InvalidRequestParts => write!(f, "Invalid Request Parts"),
         }
@@ -83,13 +78,13 @@ pub trait RequestFromBytes<'a> {
 impl<'a> RequestFromBytes<'a> for Request<&'a [u8]> {
     fn take_request(lines: &mut Lines<BufReader<TcpStream>>) -> Result<Request<()>, ParseError> {
         let Some(Ok(line)) = lines.next() else {
-           return Err(ParseError::Incomplete);
+           return Err(ParseError::MalformedRequest);
         };
 
         let mut parts = line.split(' ');
 
         let Some(method) = parts.next() else {
-            return Err(ParseError::Incomplete);
+            return Err(ParseError::MalformedRequest);
         };
         
         if !validate_method(method) {
@@ -97,11 +92,11 @@ impl<'a> RequestFromBytes<'a> for Request<&'a [u8]> {
         }
 
         let Some(uri) = parts.next() else {
-            return Err(ParseError::Incomplete);            
+            return Err(ParseError::MalformedRequest);            
         };
 
         let Some(version) = parts.next() else {
-            return Err(ParseError::Incomplete);
+            return Err(ParseError::MalformedRequest);
         };
         
         if parts.next().is_some() {

@@ -1,7 +1,6 @@
 use vegemite::{run, sys, Get, Route};
 
 fn get(_get: Get) -> u16 {
-    println!("Get");
     200
 }
 

@@ -44,7 +44,7 @@ pub struct RequestTask {
     pub router: Arc<Route>
 }
 
-pub struct Context<'a> {
+pub struct RequestState<'a> {
     pub global_cache: TypeCacheShared,
     pub local_cache: TypeCache,
     pub request: Request<()>,
@@ -182,7 +182,7 @@ fn handle_request(task: RequestTask) {
 
     path_iter.next();
 
-    let mut ctx = Context {
+    let mut ctx = RequestState {
         global_cache: task.cache.clone(),
         local_cache: TypeCache::new(),
         request: task.request,
@@ -241,7 +241,7 @@ fn handle_connection(task: ConnectionTask) {
                 // think this may be something to do with incomplete http parsing.
                 return;
             }
-            Err(ParseError::Incomplete) => {
+            Err(ParseError::MalformedRequest) => {
                 continue;
             }
             Err(_) => {
