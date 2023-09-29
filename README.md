@@ -1,7 +1,7 @@
 <div align="center">
   <h1>Vegemite</h1>
   <p>
-    <strong>Async-Free HTTP framework for Rust</strong>
+    <strong>A Synchronous HTTP framework for Rust</strong>
   </p>
   <p>
 
