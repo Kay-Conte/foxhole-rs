@@ -29,16 +29,8 @@ impl Resolve for Auth {
     type Output = ResolveGuard<Self>;
 
     fn resolve(ctx: &mut vegemite::RequestState) -> Self::Output {
-        let token = ctx.request.headers().iter().find_map(|h| {
-            if h.0 == "Authorization" {
-                Some(h.1.to_str().unwrap().to_string())
-            } else {
-                None
-            }
-        });
-
-        match token {
-            Some(v) => ResolveGuard::Value(Auth { token: v }),
+        match ctx.request.headers().get("Authorization") {
+            Some(v) => ResolveGuard::Value(Auth { token: v.to_str().unwrap().to_string() }),
             None => ResolveGuard::Respond(401u16.maybe_response().unwrap()),
         }
     }
