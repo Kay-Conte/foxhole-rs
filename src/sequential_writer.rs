@@ -45,7 +45,7 @@ where
     pub fn send(self, bytes: &[u8]) -> std::io::Result<()> {
         let mut writer = match self.state {
             State::Writer(w) => w,
-            State::Waiting(r) => r.recv().expect("Failed to get writer from the receiver"),
+            State::Waiting(r) => { r.recv().expect("Failed to get writer from the receiver") }
         };
 
         writer.write_all(bytes)?;
@@ -53,7 +53,7 @@ where
         writer.flush()?;
 
         let _ = self.next.send(writer);
-        
+
         Ok(())
     }
 }

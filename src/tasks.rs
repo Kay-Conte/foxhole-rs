@@ -1,13 +1,12 @@
 use std::{
     collections::VecDeque,
-    io::Read,
     net::TcpStream,
     str::Split,
     sync::{
         atomic::{AtomicUsize, Ordering},
         Arc, Condvar, Mutex,
     },
-    time::Duration,
+    time::Duration, io::{BufReader, BufRead},
 };
 
 use http::Request;
@@ -20,7 +19,6 @@ use crate::{
 };
 
 const MIN_THREADS: usize = 4;
-const BUF_UNINIT_SIZE: usize = 1024;
 const TIMEOUT: u64 = 5;
 
 pub struct ConnectionTask {
@@ -56,8 +54,7 @@ pub struct Context<'a> {
 struct Shared<Task> {
     /// Pool of tasks that need to be run
     pool: Mutex<VecDeque<Task>>,
-
-    /// Conditional var used to sleep and wake threads
+/// Conditional var used to sleep and wake threads
     condvar: Condvar,
 
     /// Total number of threads currently waiting for a task
@@ -165,7 +162,6 @@ where
     /// Adds a task to the task pool and spawns a thread if there is none available
     ///
     /// # Panics
-    ///
     /// This function can panic if the mutex is poisoned. Mutex poisoning will likely remain
     /// unhandled in the foreseeable future until a graceful shutdown mechanism is provided.
     pub fn send_task(&self, task: Task) {
@@ -180,7 +176,7 @@ where
 }
 
 fn handle_request(task: RequestTask) {
-    let path = task.request.uri().path().to_string();
+    let path = task.request.uri().path().to_owned();
 
     let mut path_iter = path.split("/");
 
@@ -195,18 +191,16 @@ fn handle_request(task: RequestTask) {
 
     let mut cursor = task.router.as_ref();
 
-    'outer: loop {
+    loop {
         for system in cursor.systems() {
             if let Some(r) = system.call(&mut ctx) {
                 let _ = task.writer.send(&r.into_bytes());
 
-                break 'outer;
+                return;
             }
         }
 
         let Some(next) = ctx.path_iter.next() else {
-            let _ = task.writer.send(&404u16.maybe_response().unwrap().into_bytes());
-
             break;
         };
 
@@ -216,31 +210,23 @@ fn handle_request(task: RequestTask) {
             break;
         }
     }
-   
+
+    let _ = task.writer.send(&404u16.maybe_response().unwrap().into_bytes());
 }
 
 /// # Panics
 /// Panics if the stream is closed early. This will be fixed.
-fn handle_connection(mut task: ConnectionTask) {
+fn handle_connection(task: ConnectionTask) {
     task.stream
         .set_read_timeout(Some(Duration::from_secs(TIMEOUT)))
         .expect("Shouldn't fail unless duration is 0");
 
-
-    let mut buf = vec![0; BUF_UNINIT_SIZE];
-    let mut bytes_read: usize = 0;
-
     // FIXME panics if stream closed early
     let mut writer = SequentialWriter::new(sequential_writer::State::Writer(task.stream.try_clone().unwrap()));
+    let mut reader = BufReader::new(task.stream).lines();
 
-    while let Ok(n) = task.stream.read(&mut buf[bytes_read..]) {
-        if n == 0 {
-            return;
-        }
-
-        bytes_read += n;
-
-        match Request::try_headers_from_bytes(&buf[..bytes_read]) {
+    loop {
+        match Request::take_request(&mut reader) {
             Ok(req) => {
                 task.request_pool.send_task(RequestTask {
                     cache: task.cache.clone(),
@@ -250,9 +236,12 @@ fn handle_connection(mut task: ConnectionTask) {
                 });
 
                 writer = SequentialWriter::new(sequential_writer::State::Waiting(writer.1));
+
+                // FIXME multiplexing is actually slower than closing the connection every time. I
+                // think this may be something to do with incomplete http parsing.
+                return;
             }
             Err(ParseError::Incomplete) => {
-                buf.resize(buf.len() + n, 0);
                 continue;
             }
             Err(_) => {

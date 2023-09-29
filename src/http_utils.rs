@@ -3,7 +3,7 @@
 
 use http::{Request, Response, StatusCode, Version};
 
-use std::io::{Write, BufRead};
+use std::{io::{Write, BufRead, BufReader, Lines}, net::TcpStream};
 
 use crate::systems::RawResponse;
 
@@ -76,14 +76,12 @@ pub trait RequestFromBytes<'a> {
     /// # Errors
     ///
     /// Returns `Err` if the bytes are not a valid HTTP request
-    fn try_headers_from_bytes(bytes: &[u8]) -> Result<Request<()>, ParseError>;
+    fn take_request(bytes: &mut Lines<BufReader<TcpStream>>) -> Result<Request<()>, ParseError>;
 }
 
 /// the entirety of the header must be valid utf8
 impl<'a> RequestFromBytes<'a> for Request<&'a [u8]> {
-    fn try_headers_from_bytes(bytes: &[u8]) -> Result<Request<()>, ParseError> {
-        let mut lines = bytes.lines();
-
+    fn take_request(lines: &mut Lines<BufReader<TcpStream>>) -> Result<Request<()>, ParseError> {
         let Some(Ok(line)) = lines.next() else {
            return Err(ParseError::Incomplete);
         };
@@ -115,14 +113,14 @@ impl<'a> RequestFromBytes<'a> for Request<&'a [u8]> {
             .uri(uri)
             .version(Version::parse_version(version)?);
 
-        while let Some(line) = lines.next().transpose().map_err(|_| ParseError::Incomplete)? {
+        while let Some(Ok(line)) = lines.next() {
             if line.is_empty() { break; }
 
             let h = line.split_once(": ")
-                .ok_or(ParseError::Incomplete)?;
+                .ok_or(ParseError::MalformedRequest)?;
 
             if h.1.is_empty() {
-                return Err(ParseError::Incomplete);
+                return Err(ParseError::MalformedRequest);
             }
 
             req = req.header(
