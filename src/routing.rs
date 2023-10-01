@@ -23,8 +23,8 @@ impl Route {
     }
 
     /// Add a `Route` as a child of this node
-    pub fn route(mut self, path: impl Into<String>, node: Route) -> Self {
-        self.children.insert(path.into(), node);
+    pub fn route(mut self, path: impl Into<String>, route: impl Into<Route>) -> Self {
+        self.children.insert(path.into(), route.into());
 
         self
     }
@@ -37,5 +37,11 @@ impl Route {
     /// Route to a child of this node by path
     pub fn get_child<'a>(&'a self, path: &str) -> Option<&'a Route> {
         self.children.get(path)
+    }
+}
+
+impl From<Vec<DynSystem>> for Route {
+    fn from(value: Vec<DynSystem>) -> Self {
+        Route::new(value)
     }
 }

@@ -3,7 +3,7 @@
 
 use http::{Request, Response, StatusCode, Version};
 
-use std::io::{Write, BufRead};
+use std::{io::{Write, BufReader, Lines}, net::TcpStream};
 
 use crate::systems::RawResponse;
 
@@ -15,10 +15,6 @@ pub enum ParseError {
     InvalidMethod,
     InvalidProtocolVer,
     InvalidRequestParts,
-
-    /// `Incomplete` should be returned in any case that reading more bytes *may* make the request
-    /// valid.
-    Incomplete,
 }
 
 impl std::fmt::Display for ParseError {
@@ -26,7 +22,6 @@ impl std::fmt::Display for ParseError {
         match self {
             ParseError::InvalidProtocolVer => write!(f, "Invalid Protocol"),
             ParseError::MalformedRequest => write!(f, "Malformed Request"),
-            ParseError::Incomplete => write!(f, "Not Enough Bytes"),
             ParseError::InvalidMethod => write!(f, "Invalid Method"),
             ParseError::InvalidRequestParts => write!(f, "Invalid Request Parts"),
         }
@@ -76,22 +71,20 @@ pub trait RequestFromBytes<'a> {
     /// # Errors
     ///
     /// Returns `Err` if the bytes are not a valid HTTP request
-    fn try_headers_from_bytes(bytes: &[u8]) -> Result<Request<()>, ParseError>;
+    fn take_request(bytes: &mut Lines<BufReader<TcpStream>>) -> Result<Request<()>, ParseError>;
 }
 
 /// the entirety of the header must be valid utf8
 impl<'a> RequestFromBytes<'a> for Request<&'a [u8]> {
-    fn try_headers_from_bytes(bytes: &[u8]) -> Result<Request<()>, ParseError> {
-        let mut lines = bytes.lines();
-
+    fn take_request(lines: &mut Lines<BufReader<TcpStream>>) -> Result<Request<()>, ParseError> {
         let Some(Ok(line)) = lines.next() else {
-           return Err(ParseError::Incomplete);
+           return Err(ParseError::MalformedRequest);
         };
 
         let mut parts = line.split(' ');
 
         let Some(method) = parts.next() else {
-            return Err(ParseError::Incomplete);
+            return Err(ParseError::MalformedRequest);
         };
         
         if !validate_method(method) {
@@ -99,11 +92,11 @@ impl<'a> RequestFromBytes<'a> for Request<&'a [u8]> {
         }
 
         let Some(uri) = parts.next() else {
-            return Err(ParseError::Incomplete);            
+            return Err(ParseError::MalformedRequest);            
         };
 
         let Some(version) = parts.next() else {
-            return Err(ParseError::Incomplete);
+            return Err(ParseError::MalformedRequest);
         };
         
         if parts.next().is_some() {
@@ -115,7 +108,7 @@ impl<'a> RequestFromBytes<'a> for Request<&'a [u8]> {
             .uri(uri)
             .version(Version::parse_version(version)?);
 
-        while let Some(line) = lines.next().transpose().map_err(|_| ParseError::Incomplete)? {
+        while let Some(Ok(line)) = lines.next() {
             if line.is_empty() { break; }
 
             let h = line.split_once(": ")
@@ -175,8 +168,6 @@ where
 
         // FIXME idk about not checking result
         let _ = parse_response_line_into_buf(&mut buf, &self);
-
-        let _ = write!(buf, "\r\n");
 
         buf.extend_from_slice(self.map(IntoRawBytes::into_raw_bytes).body());
 

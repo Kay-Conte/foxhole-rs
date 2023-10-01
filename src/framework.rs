@@ -7,7 +7,7 @@ use std::{
 
 use crate::{
     routing::Route,
-    tasks::{Task, TaskPool}, type_cache::TypeCache, 
+    tasks::{ConnectionTask, TaskPool, RequestTask}, type_cache::TypeCache, 
 };
 
 /// Application entry point. Call this function to run your application.
@@ -20,20 +20,21 @@ where
     let router = Arc::new(router);
     let type_cache = Arc::new(RwLock::new(TypeCache::new()));
 
-    let mut pool = TaskPool::new();
-
+    let connection_pool = TaskPool::<ConnectionTask>::default();
+    let request_pool = Arc::new(TaskPool::<RequestTask>::default());
 
     loop {
         let Ok((stream, _addr)) = incoming.accept() else {
             continue;
         };
 
-        let task = Task {
+        let task = ConnectionTask {
+            request_pool: request_pool.clone(),
             cache: type_cache.clone(),
             stream,
             router: router.clone(),
         };
 
-        pool.send_task(task);
+        connection_pool.send_task(task);
     }
 }
