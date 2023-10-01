@@ -9,6 +9,3 @@ categories = ["web-programming::http-server", "web-programming"]
 
 [dependencies]
 http = "0.2.9"
-
-[dev-dependencies]
-rand = "0.8.5"
