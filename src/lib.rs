@@ -39,7 +39,7 @@
 //! use vegemite::{run, sys, Get, Route, Response};
 //!  
 //! fn get(_get: Get) -> Response<String> {
-//!     let content = String::from("<h1>Hello World<h1>");cleaning
+//!     let content = String::from("<h1>Hello World</h1>");
 //!  
 //!     Response::builder()
 //!         .status(200)

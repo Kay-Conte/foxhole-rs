@@ -1,6 +1,6 @@
 use http::{Method, Response, Version};
 
-use crate::{tasks::RequestState, http_utils::IntoRawBytes};
+use crate::{tasks::RequestState, http_utils::IntoRawBytes, type_cache::TypeCacheKey};
 
 pub type RawResponse = Response<Vec<u8>>;
 
@@ -116,6 +116,19 @@ impl Resolve for Post {
             ResolveGuard::Value(Post)            
         } else {
             ResolveGuard::None
+        }
+    }
+}
+
+pub struct Query<K> (pub K::Value) where K: TypeCacheKey;
+
+impl<K> Resolve for Query<K> where K: TypeCacheKey, K::Value: Clone {
+    type Output = ResolveGuard<Self>;
+
+    fn resolve(ctx: &mut RequestState) -> Self::Output {
+        match ctx.global_cache.read().unwrap().get::<K>() {
+            Some(v) => ResolveGuard::Value(Query(v.clone())),
+            None => ResolveGuard::None,
         }
     }
 }
