@@ -1,24 +1,11 @@
 use std::sync::{Arc, RwLock};
 
-use http::Response;
-use vegemite::{type_cache::{TypeCacheKey, TypeCache}, systems::Query, Get, Route, sys, framework::run_with_cache, IntoResponse};
-
-struct Html {
-    value: String,
-}
-
-impl IntoResponse for Html {
-    fn response(self) -> Response<Vec<u8>> {
-        let bytes = self.value.into_bytes();
-
-        Response::builder()
-            .status(200)
-            .header("Content-Type", "text/html; charset=utf-8")
-            .header("Content-Length", format!("{}", bytes.len()))
-            .body(bytes)
-            .unwrap()
-    }
-}
+use vegemite::{
+    framework::run_with_cache,
+    systems::{Endpoint, Html, Query, DynSystem},
+    type_cache::{TypeCache, TypeCacheKey},
+    Get, Route,
+};
 
 pub struct Counter(u32);
 
@@ -28,20 +15,20 @@ impl TypeCacheKey for Counter {
     type Value = Arc<RwLock<Counter>>;
 }
 
-// FIXME counter is innacurate because favicon request also increments counter. Create a new
-// `Endpoint` guard when internal iterator becomes peekable
-fn get(_get: Get, counter: Query<Counter>) -> Html {
+// The value stored inside `Query` is `Counter::Value`
+fn get(_get: Get, counter: Query<Counter>, _e: Endpoint) -> Html {
     counter.0.write().unwrap().0 += 1;
 
-    let page = format!("<h1>This page has been visited {} times!</h1>", counter.0.read().unwrap().0);
+    let page = format!(
+        "<h1>This page has been visited {} times!</h1>",
+        counter.0.read().unwrap().0
+    );
 
-    Html {
-        value: page,
-    }
+    Html(page)
 }
 
 fn main() {
-    let router = Route::new(sys![get]);
+    let router = Route::new(vec![DynSystem::new(get)]);
 
     let mut cache = TypeCache::new();
 

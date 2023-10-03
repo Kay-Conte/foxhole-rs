@@ -6,13 +6,13 @@ use std::{
         atomic::{AtomicUsize, Ordering},
         Arc, Condvar, Mutex,
     },
-    time::Duration, io::{BufReader, BufRead},
+    time::Duration, io::{BufReader, BufRead}, iter::Peekable,
 };
 
 use http::Request;
 
 use crate::{
-    http_utils::{ParseError, RequestFromBytes, ResponseToBytes},
+    http_utils::{ParseError, RequestFromBytes, IntoRawBytes},
     routing::Route,
     type_cache::{TypeCache, TypeCacheShared},
     MaybeIntoResponse, sequential_writer::{SequentialWriter, self},
@@ -48,7 +48,7 @@ pub struct RequestState<'a> {
     pub global_cache: TypeCacheShared,
     pub local_cache: TypeCache,
     pub request: Request<()>,
-    pub path_iter: Split<'a, &'static str>,
+    pub path_iter: Peekable<Split<'a, &'static str>>,
 }
 
 struct Shared<Task> {
@@ -178,7 +178,7 @@ where
 fn handle_request(task: RequestTask) {
     let path = task.request.uri().path().to_owned();
 
-    let mut path_iter = path.split("/");
+    let mut path_iter = path.split("/").peekable();
 
     path_iter.next();
 
@@ -194,7 +194,7 @@ fn handle_request(task: RequestTask) {
     loop {
         for system in cursor.systems() {
             if let Some(r) = system.call(&mut ctx) {
-                let _ = task.writer.send(&r.into_bytes());
+                let _ = task.writer.send(&r.into_raw_bytes());
 
                 return;
             }
@@ -211,7 +211,7 @@ fn handle_request(task: RequestTask) {
         }
     }
 
-    let _ = task.writer.send(&404u16.maybe_response().unwrap().into_bytes());
+    let _ = task.writer.send(&404u16.maybe_response().unwrap().into_raw_bytes());
 }
 
 /// # Panics

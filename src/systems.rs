@@ -1,15 +1,8 @@
 use http::{Method, Response, Version};
 
-use crate::{tasks::RequestState, http_utils::IntoRawBytes, type_cache::TypeCacheKey};
+use crate::{http_utils::IntoRawBytes, tasks::RequestState, type_cache::TypeCacheKey};
 
 pub type RawResponse = Response<Vec<u8>>;
-
-/// `Resolve` is a trait 
-pub trait Resolve: Sized {
-    type Output;
-
-    fn resolve(ctx: &mut RequestState) -> Self::Output;
-}
 
 pub trait IntoResponse {
     fn response(self) -> RawResponse;
@@ -19,9 +12,21 @@ pub trait MaybeIntoResponse {
     fn maybe_response(self) -> Option<RawResponse>;
 }
 
-impl<T> MaybeIntoResponse for T where T: IntoResponse {
+impl<T> MaybeIntoResponse for T
+where
+    T: IntoResponse,
+{
     fn maybe_response(self) -> Option<RawResponse> {
         Some(self.response())
+    }
+}
+
+impl<T> MaybeIntoResponse for Response<T>
+where
+    T: IntoRawBytes,
+{
+    fn maybe_response(self) -> Option<RawResponse> {
+        Some(self.map(IntoRawBytes::into_raw_bytes))
     }
 }
 
@@ -31,13 +36,20 @@ impl MaybeIntoResponse for () {
     }
 }
 
-impl<T> MaybeIntoResponse for Option<T> where T: MaybeIntoResponse {
+impl<T> MaybeIntoResponse for Option<T>
+where
+    T: MaybeIntoResponse,
+{
     fn maybe_response(self) -> Option<RawResponse> {
         self.and_then(MaybeIntoResponse::maybe_response)
     }
 }
 
-impl<T, E> MaybeIntoResponse for Result<T, E> where T: MaybeIntoResponse, E: MaybeIntoResponse {
+impl<T, E> MaybeIntoResponse for Result<T, E>
+where
+    T: MaybeIntoResponse,
+    E: MaybeIntoResponse,
+{
     fn maybe_response(self) -> Option<RawResponse> {
         match self {
             Ok(v) => v.maybe_response(),
@@ -46,26 +58,40 @@ impl<T, E> MaybeIntoResponse for Result<T, E> where T: MaybeIntoResponse, E: May
     }
 }
 
-impl MaybeIntoResponse for u16 {
-    fn maybe_response(self) -> Option<RawResponse> {
-        Some(
-            Response::builder()
-                .version(Version::HTTP_10)
-                .status(self)
-                .header("Content-Type", "text/plain; charset=UTF-8")
-                .header("Content-Length", "0")
-                .body(Vec::new())
-                .expect("Failed to build request"),
-        )
+impl IntoResponse for u16 {
+    fn response(self) -> RawResponse {
+        Response::builder()
+            .version(Version::HTTP_11)
+            .status(self)
+            .header("Content-Type", "text/plain; charset=UTF-8")
+            .header("Content-Length", "0")
+            .body(Vec::new())
+            .expect("Failed to build request")
     }
 }
 
-impl<T> MaybeIntoResponse for Response<T> where T: IntoRawBytes {
-    fn maybe_response(self) -> Option<RawResponse> {
-        Some(self.map(IntoRawBytes::into_raw_bytes))
+pub struct Html(pub String);
+
+impl IntoResponse for Html {
+    fn response(self) -> Response<Vec<u8>> {
+        let bytes = self.0.into_bytes();
+
+        Response::builder()
+            .version(Version::HTTP_11)
+            .status(200)
+            .header("Content-Type", "text/html; charset=utf-8")
+            .header("Content-Length", format!("{}", bytes.len()))
+            .body(bytes)
+            .unwrap()
     }
 }
 
+/// `Resolve` is a trait
+pub trait Resolve: Sized {
+    type Output;
+
+    fn resolve(ctx: &mut RequestState) -> Self::Output;
+}
 
 /// `ResolveGuard` is the expected return type of top level `Resolve`able objects. Only types that
 /// return `ResolveGuard` can be used as function parameters
@@ -113,22 +139,45 @@ impl Resolve for Post {
 
     fn resolve(ctx: &mut RequestState) -> Self::Output {
         if ctx.request.method() == Method::POST {
-            ResolveGuard::Value(Post)            
+            ResolveGuard::Value(Post)
         } else {
             ResolveGuard::None
         }
     }
 }
 
-pub struct Query<K> (pub K::Value) where K: TypeCacheKey;
+/// "Query" a value from the global_cache of the `RequestState` and clone it.
+pub struct Query<K>(pub K::Value)
+where
+    K: TypeCacheKey;
 
-impl<K> Resolve for Query<K> where K: TypeCacheKey, K::Value: Clone {
+impl<K> Resolve for Query<K>
+where
+    K: TypeCacheKey,
+    K::Value: Clone,
+{
     type Output = ResolveGuard<Self>;
 
     fn resolve(ctx: &mut RequestState) -> Self::Output {
         match ctx.global_cache.read().unwrap().get::<K>() {
             Some(v) => ResolveGuard::Value(Query(v.clone())),
             None => ResolveGuard::None,
+        }
+    }
+}
+
+/// A function with `Endpoint` as a parameter requires that the internal `path_iter` of the
+/// `RequestState` must be empty. This will only run if there are no trailing path parts of the
+/// uri.
+pub struct Endpoint;
+
+impl Resolve for Endpoint {
+    type Output = ResolveGuard<Self>;
+
+    fn resolve(ctx: &mut RequestState) -> Self::Output {
+        match ctx.path_iter.peek() {
+            Some(v) if !v.is_empty() => ResolveGuard::None,
+            _ => ResolveGuard::Value(Endpoint),
         }
     }
 }
@@ -167,7 +216,7 @@ macro_rules! system {
             #[allow(unused)]
             fn run(self, ctx: &mut RequestState) -> Option<RawResponse> {
 
-                
+
                 $(
                 #[allow(non_snake_case)]
                 let $x = match $x::resolve(ctx) {

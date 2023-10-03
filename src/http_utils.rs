@@ -155,15 +155,11 @@ fn parse_response_line_into_buf<T>(
     Ok(())
 }
 
-pub trait ResponseToBytes {
-    fn into_bytes(self) -> Vec<u8>;
-}
-
-impl<T> ResponseToBytes for Response<T>
+impl<T> IntoRawBytes for Response<T>
 where
     T: IntoRawBytes,
 {
-    fn into_bytes(self) -> Vec<u8> {
+    fn into_raw_bytes(self) -> Vec<u8> {
         let mut buf = vec![];
 
         // FIXME idk about not checking result

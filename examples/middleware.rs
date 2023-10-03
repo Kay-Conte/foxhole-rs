@@ -1,24 +1,7 @@
 use vegemite::{
-    framework::run, routing::Route, sys, Get, IntoResponse, MaybeIntoResponse, Resolve,
-    ResolveGuard, Response,
+    framework::run, routing::Route, sys, Get, MaybeIntoResponse, Resolve,
+    ResolveGuard, systems::Html,
 };
-
-struct Html {
-    value: String,
-}
-
-impl IntoResponse for Html {
-    fn response(self) -> Response<Vec<u8>> {
-        let bytes = self.value.into_bytes();
-
-        Response::builder()
-            .status(200)
-            .header("Content-Type", "text/html; charset=utf-8")
-            .header("Content-Length", format!("{}", bytes.len()))
-            .body(bytes)
-            .unwrap()
-    }
-}
 
 struct Auth {
     #[allow(unused)]
@@ -42,9 +25,7 @@ fn middleware(_auth: Auth) {
 }
 
 fn get_page(_get: Get) -> Html {
-    Html {
-        value: "<h1> This page is for authorized personnel only </h1>".to_string(),
-    }
+    Html("<h1> This page is for authorized personnel only </h1>".to_string())
 }
 
 fn main() {

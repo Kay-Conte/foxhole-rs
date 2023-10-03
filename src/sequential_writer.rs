@@ -17,6 +17,8 @@ where
     next: Sender<W>,
 }
 
+
+
 impl<W> SequentialWriter<W>
 where
     W: Write + Send + Sync,
