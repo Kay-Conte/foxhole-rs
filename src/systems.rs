@@ -207,11 +207,11 @@ impl DynSystem {
 
 macro_rules! system {
     ($($x:ident),* $(,)?) => {
-        impl<R, $($x,)* T> System<(R, $($x,)*)> for T
+        impl<RESPONSE, $($x,)* BASE> System<(RESPONSE, $($x,)*)> for BASE 
         where
-            T: Fn($($x,)*) -> R,
+            BASE: Fn($($x,)*) -> RESPONSE,
             $($x: Resolve<Output = ResolveGuard<$x>>,)*
-            R: MaybeIntoResponse,
+            RESPONSE: MaybeIntoResponse,
         {
             #[allow(unused)]
             fn run(self, ctx: &mut RequestState) -> Option<RawResponse> {
@@ -244,4 +244,4 @@ macro_rules! all {
     }
 }
 
-all! { A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P, Q }
+all! { A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P, Q, R, S, T, U, V, W, X, Y, Z }
