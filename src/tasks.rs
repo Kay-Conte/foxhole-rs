@@ -240,7 +240,7 @@ impl TaskPool {
 
         println!("{}", self.shared.waiting_tasks.load(Ordering::Acquire));
 
-        if self.shared.waiting_tasks.load(Ordering::Acquire) == 0 {
+        if self.shared.waiting_tasks.load(Ordering::Acquire) < MIN_THREADS {
             self.spawn_thread(true);
         }
 
