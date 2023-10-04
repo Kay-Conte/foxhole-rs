@@ -178,7 +178,6 @@ where
 fn handle_request(task: RequestTask) {
     let path = task.request.uri().path().to_owned();
 
-    #[allow(clippy::single_char_pattern)]
     let mut path_iter = path.split("/");
 
     path_iter.next();
