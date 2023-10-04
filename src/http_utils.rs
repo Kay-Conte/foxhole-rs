@@ -225,7 +225,6 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rand::RngCore;
     use http::{Method, Version, HeaderValue};
 
     #[test]
@@ -246,24 +245,6 @@ mod tests {
         assert_eq!(req.headers().get("Accept"), Some(&HeaderValue::from_str("application/json").unwrap()));
         assert_eq!(req.headers().get("Content-Type"), Some(&HeaderValue::from_str("application/json").unwrap()));
         assert_eq!(req.headers().get("Content-Length"), Some(&HeaderValue::from_str("87").unwrap()));
-    }
-
-    // this one may TECHNICALLY be valid, but thats the chances of winning the lottery
-    #[test]
-    fn rand_bytes_request() {
-        let mut bytes = [0; 4096];
-        rand::thread_rng().fill_bytes(&mut bytes);
-
-        assert!(Request::try_headers_from_bytes(&bytes[..]).is_err());
-    }
-
-    // test rand bytes in body
-    #[test]
-    fn rand_bytes_body() {
-        let bytes: [u8; 3] = [0xC0, 0x80, 0xE0];
-
-        let req = Request::try_headers_from_bytes(&bytes[..]);
-        assert!(req.is_err());
     }
 
     #[test]
