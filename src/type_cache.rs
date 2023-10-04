@@ -1,8 +1,16 @@
-use std::{collections::HashMap, any::{TypeId, Any}, sync::{Arc, RwLock}};
+use std::{
+    any::{Any, TypeId},
+    collections::HashMap,
+    sync::{Arc, RwLock},
+};
 
 type Value = Box<dyn Any + Sync + Send>;
 
 pub type TypeCacheShared = Arc<RwLock<TypeCache>>;
+
+pub trait TypeCacheKey: 'static {
+    type Value: Send + Sync;
+}
 
 #[derive(Default)]
 pub struct TypeCache {
@@ -16,16 +24,22 @@ impl TypeCache {
         }
     }
 
-    pub fn get<T: Any>(&self) -> Option<&T> {
-        self.inner.get(&TypeId::of::<T>()).map(|f| f.downcast_ref().unwrap())
+    pub fn get<K: TypeCacheKey>(&self) -> Option<&K::Value> {
+        self.inner
+            .get(&TypeId::of::<K>())
+            .map(|f| f.downcast_ref().unwrap())
     }
 
-    pub fn insert<T: Any + Send + Sync>(&mut self, value: T) -> Option<Box<T>> {
-        self.inner.insert(TypeId::of::<T>(), Box::new(value)).map(|f| f.downcast().unwrap())
-    } 
+    pub fn insert<K: TypeCacheKey>(&mut self, value: K::Value) -> Option<Box<K::Value>> {
+        self.inner
+            .insert(TypeId::of::<K>(), Box::new(value))
+            .map(|f| f.downcast().unwrap())
+    }
 
-    pub fn remove<T: Any + Send + Sync>(&mut self) -> Option<Box<T>> {
-        self.inner.remove(&TypeId::of::<T>()).map(|f| f.downcast().unwrap())
+    pub fn remove<K: TypeCacheKey>(&mut self) -> Option<Box<K::Value>> {
+        self.inner
+            .remove(&TypeId::of::<K>())
+            .map(|f| f.downcast().unwrap())
     }
 }
 
@@ -33,16 +47,22 @@ impl TypeCache {
 mod tests {
     use super::*;
 
+    pub struct UserId;
+
+    impl TypeCacheKey for UserId {
+        type Value = Arc<u32>;
+    }
+
     #[test]
     fn type_map() {
         let mut cache = TypeCache::new();
-        
-        assert!(cache.insert::<u32>(0).is_none());
 
-        assert!(cache.get::<u32>().is_some());
+        assert!(cache.insert::<UserId>(Arc::new(0)).is_none());
 
-        assert!(cache.insert::<u32>(0).is_some());
+        assert!(cache.get::<UserId>().is_some());
 
-        assert!(cache.remove::<u32>().is_some());
+        assert!(cache.insert::<UserId>(Arc::new(0)).is_some());
+
+        assert!(cache.remove::<UserId>().is_some());
     }
 }
