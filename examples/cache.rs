@@ -2,9 +2,9 @@ use std::sync::{Arc, RwLock};
 
 use vegemite::{
     framework::run_with_cache,
-    systems::{DynSystem, Endpoint, Html, Query},
+    systems::{Endpoint, Html, Query},
     type_cache::{TypeCache, TypeCacheKey},
-    Get, Route,
+    Get, Route, sys,
 };
 
 pub struct Counter(u32);
@@ -28,11 +28,13 @@ fn get(_get: Get, counter: Query<Counter>, _e: Endpoint) -> Html {
 }
 
 fn main() {
-    let router = Route::new(vec![DynSystem::new(get)]);
+    let router = Route::new(sys![get]);
 
     let mut cache = TypeCache::new();
 
     cache.insert::<Counter>(Arc::new(RwLock::new(Counter(0))));
+
+    println!("Try connecting with a browser at 'http://localhost:8080'");
 
     run_with_cache("0.0.0.0:8080", router, cache);
 }

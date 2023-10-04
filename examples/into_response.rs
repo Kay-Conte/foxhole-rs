@@ -34,5 +34,7 @@ fn main() {
         .route("favicon.ico", sys![favicon])
         .route("page", sys![page]);
 
+    println!("Try connecting from a browser at 'http://localhost:8080/page'");
+
     run("127.0.0.1:5000", router);
 }

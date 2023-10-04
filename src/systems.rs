@@ -102,6 +102,15 @@ pub enum ResolveGuard<T> {
     None,
 }
 
+impl<T> From<Option<T>> for ResolveGuard<T> {
+    fn from(value: Option<T>) -> Self {
+        match value {
+            Some(v) => ResolveGuard::Value(v),
+            None => ResolveGuard::None,
+        }
+    }
+}
+
 impl<T> ResolveGuard<T> {
     pub fn map<N>(self, f: fn(T) -> N) -> ResolveGuard<N> {
         match self {
@@ -151,10 +160,7 @@ where
     K::Value: Clone,
 {
     fn resolve(ctx: &mut RequestState) -> ResolveGuard<Self> {
-        match ctx.global_cache.read().unwrap().get::<K>() {
-            Some(v) => ResolveGuard::Value(Query(v.clone())),
-            None => ResolveGuard::None,
-        }
+        ctx.global_cache.read().unwrap().get::<K>().map(|v| Query(v.clone())).into()
     }
 }
 
@@ -169,6 +175,32 @@ impl Resolve for Endpoint {
             Some(v) if !v.is_empty() => ResolveGuard::None,
             _ => ResolveGuard::Value(Endpoint),
         }
+    }
+}
+
+/// Consumes the next part of the url `path_iter`. Note that this will happen on call to its
+/// `resolve` method so ordering of parameters matter. Place any necessary guards before this
+/// method.
+pub struct UrlPart(pub String);
+
+impl Resolve for UrlPart {
+    fn resolve(ctx: &mut RequestState) -> ResolveGuard<Self> {
+        ctx.path_iter.next().map(|i| UrlPart(i.to_string())).into()
+    }
+}
+
+pub struct UrlCollect(pub Vec<String>);
+
+impl Resolve for UrlCollect {
+    fn resolve(ctx: &mut RequestState) -> ResolveGuard<Self> {
+
+        let mut collect = Vec::new();
+
+        while let Some(part) = ctx.path_iter.next() {
+            collect.push(part.to_string())
+        }
+
+        ResolveGuard::Value(UrlCollect(collect))
     }
 }
 
