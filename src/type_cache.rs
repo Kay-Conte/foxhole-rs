@@ -1,4 +1,8 @@
-use std::{collections::HashMap, any::{TypeId, Any}, sync::{Arc, RwLock}};
+use std::{
+    any::{Any, TypeId},
+    collections::HashMap,
+    sync::{Arc, RwLock},
+};
 
 type Value = Box<dyn Any + Sync + Send>;
 
@@ -21,15 +25,21 @@ impl TypeCache {
     }
 
     pub fn get<K: TypeCacheKey>(&self) -> Option<&K::Value> {
-        self.inner.get(&TypeId::of::<K>()).map(|f| f.downcast_ref().unwrap())
+        self.inner
+            .get(&TypeId::of::<K>())
+            .map(|f| f.downcast_ref().unwrap())
     }
 
     pub fn insert<K: TypeCacheKey>(&mut self, value: K::Value) -> Option<Box<K::Value>> {
-        self.inner.insert(TypeId::of::<K>(), Box::new(value)).map(|f| f.downcast().unwrap())
-    } 
+        self.inner
+            .insert(TypeId::of::<K>(), Box::new(value))
+            .map(|f| f.downcast().unwrap())
+    }
 
     pub fn remove<K: TypeCacheKey>(&mut self) -> Option<Box<K::Value>> {
-        self.inner.remove(&TypeId::of::<K>()).map(|f| f.downcast().unwrap())
+        self.inner
+            .remove(&TypeId::of::<K>())
+            .map(|f| f.downcast().unwrap())
     }
 }
 
@@ -46,7 +56,7 @@ mod tests {
     #[test]
     fn type_map() {
         let mut cache = TypeCache::new();
-        
+
         assert!(cache.insert::<UserId>(Arc::new(0)).is_none());
 
         assert!(cache.get::<UserId>().is_some());

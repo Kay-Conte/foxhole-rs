@@ -88,9 +88,7 @@ impl IntoResponse for Html {
 
 /// `Resolve` is a trait
 pub trait Resolve: Sized {
-    type Output;
-
-    fn resolve(ctx: &mut RequestState) -> Self::Output;
+    fn resolve(ctx: &mut RequestState) -> ResolveGuard<Self>;
 }
 
 /// `ResolveGuard` is the expected return type of top level `Resolve`able objects. Only types that
@@ -119,9 +117,7 @@ impl<T> ResolveGuard<T> {
 pub struct Get;
 
 impl Resolve for Get {
-    type Output = ResolveGuard<Self>;
-
-    fn resolve(ctx: &mut RequestState) -> Self::Output {
+    fn resolve(ctx: &mut RequestState) -> ResolveGuard<Self> {
         if ctx.request.method() == Method::GET {
             ResolveGuard::Value(Get)
         } else {
@@ -135,9 +131,7 @@ impl Resolve for Get {
 pub struct Post;
 
 impl Resolve for Post {
-    type Output = ResolveGuard<Self>;
-
-    fn resolve(ctx: &mut RequestState) -> Self::Output {
+    fn resolve(ctx: &mut RequestState) -> ResolveGuard<Self> {
         if ctx.request.method() == Method::POST {
             ResolveGuard::Value(Post)
         } else {
@@ -156,9 +150,7 @@ where
     K: TypeCacheKey,
     K::Value: Clone,
 {
-    type Output = ResolveGuard<Self>;
-
-    fn resolve(ctx: &mut RequestState) -> Self::Output {
+    fn resolve(ctx: &mut RequestState) -> ResolveGuard<Self> {
         match ctx.global_cache.read().unwrap().get::<K>() {
             Some(v) => ResolveGuard::Value(Query(v.clone())),
             None => ResolveGuard::None,
@@ -172,9 +164,7 @@ where
 pub struct Endpoint;
 
 impl Resolve for Endpoint {
-    type Output = ResolveGuard<Self>;
-
-    fn resolve(ctx: &mut RequestState) -> Self::Output {
+    fn resolve(ctx: &mut RequestState) -> ResolveGuard<Self> {
         match ctx.path_iter.peek() {
             Some(v) if !v.is_empty() => ResolveGuard::None,
             _ => ResolveGuard::Value(Endpoint),
@@ -207,10 +197,10 @@ impl DynSystem {
 
 macro_rules! system {
     ($($x:ident),* $(,)?) => {
-        impl<RESPONSE, $($x,)* BASE> System<(RESPONSE, $($x,)*)> for BASE 
+        impl<RESPONSE, $($x,)* BASE> System<(RESPONSE, $($x,)*)> for BASE
         where
             BASE: Fn($($x,)*) -> RESPONSE,
-            $($x: Resolve<Output = ResolveGuard<$x>>,)*
+            $($x: Resolve,)*
             RESPONSE: MaybeIntoResponse,
         {
             #[allow(unused)]

@@ -3,12 +3,15 @@
 
 use http::{Request, Response, StatusCode, Version};
 
-use std::{io::{Write, BufReader, Lines}, net::TcpStream};
+use std::{
+    io::{BufReader, Lines, Write},
+    net::TcpStream,
+};
 
 use crate::systems::RawResponse;
 
 #[derive(Debug)]
-/// Errors while parsing requests. 
+/// Errors while parsing requests.
 pub enum ParseError {
     MalformedRequest,
 
@@ -56,16 +59,19 @@ impl VersionExt for Version {
             Version::HTTP_09 => "HTTP/0.9".to_string(),
             Version::HTTP_10 => "HTTP/1.0".to_string(),
             Version::HTTP_11 => "HTTP/1.1".to_string(),
-            Version::HTTP_2  => "HTTP/2.0".to_string(),
-            Version::HTTP_3  => "HTTP/3.0".to_string(),
+            Version::HTTP_2 => "HTTP/2.0".to_string(),
+            Version::HTTP_3 => "HTTP/3.0".to_string(),
             _ => unreachable!(),
         }
     }
 }
 
 fn validate_method(method: &str) -> bool {
-    matches!(method, "GET" | "POST" | "PUT" | "DELETE" | "HEAD" | "OPTIONS" | "CONNECT" | "TRACE" | "PATH")
-} 
+    matches!(
+        method,
+        "GET" | "POST" | "PUT" | "DELETE" | "HEAD" | "OPTIONS" | "CONNECT" | "TRACE" | "PATH"
+    )
+}
 
 pub trait RequestFromBytes<'a> {
     /// # Errors
@@ -78,7 +84,7 @@ pub trait RequestFromBytes<'a> {
 impl<'a> RequestFromBytes<'a> for Request<&'a [u8]> {
     fn take_request(lines: &mut Lines<BufReader<TcpStream>>) -> Result<Request<()>, ParseError> {
         let Some(Ok(line)) = lines.next() else {
-           return Err(ParseError::MalformedRequest);
+            return Err(ParseError::MalformedRequest);
         };
 
         let mut parts = line.split(' ');
@@ -86,19 +92,19 @@ impl<'a> RequestFromBytes<'a> for Request<&'a [u8]> {
         let Some(method) = parts.next() else {
             return Err(ParseError::MalformedRequest);
         };
-        
+
         if !validate_method(method) {
             return Err(ParseError::InvalidMethod);
         }
 
         let Some(uri) = parts.next() else {
-            return Err(ParseError::MalformedRequest);            
+            return Err(ParseError::MalformedRequest);
         };
 
         let Some(version) = parts.next() else {
             return Err(ParseError::MalformedRequest);
         };
-        
+
         if parts.next().is_some() {
             return Err(ParseError::MalformedRequest);
         }
@@ -109,25 +115,22 @@ impl<'a> RequestFromBytes<'a> for Request<&'a [u8]> {
             .version(Version::parse_version(version)?);
 
         while let Some(Ok(line)) = lines.next() {
-            if line.is_empty() { break; }
+            if line.is_empty() {
+                break;
+            }
 
-            let h = line.split_once(": ")
-                .ok_or(ParseError::MalformedRequest)?;
+            let h = line.split_once(": ").ok_or(ParseError::MalformedRequest)?;
 
             if h.1.is_empty() {
                 return Err(ParseError::MalformedRequest);
             }
 
-            req = req.header(
-                h.0,
-                h.1,
-            );
+            req = req.header(h.0, h.1);
         }
 
         req.body(()).map_err(|_| ParseError::MalformedRequest)
     }
 }
-
 
 fn parse_response_line_into_buf<T>(
     buf: &mut Vec<u8>,
@@ -217,4 +220,3 @@ where
         self.map(IntoRawBytes::into_raw_bytes)
     }
 }
-

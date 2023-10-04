@@ -33,7 +33,7 @@ impl Route {
     pub fn systems(&self) -> &[DynSystem] {
         &self.systems
     }
-    
+
     /// Route to a child of this node by path
     pub fn get_child<'a>(&'a self, path: &str) -> Option<&'a Route> {
         self.children.get(path)

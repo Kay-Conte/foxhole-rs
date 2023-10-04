@@ -1,21 +1,24 @@
 use std::{
     collections::VecDeque,
+    io::{BufRead, BufReader},
+    iter::Peekable,
     net::TcpStream,
     str::Split,
     sync::{
         atomic::{AtomicUsize, Ordering},
         Arc, Condvar, Mutex,
     },
-    time::Duration, io::{BufReader, BufRead}, iter::Peekable,
+    time::Duration,
 };
 
 use http::Request;
 
 use crate::{
-    http_utils::{ParseError, RequestFromBytes, IntoRawBytes},
+    http_utils::{IntoRawBytes, ParseError, RequestFromBytes},
     routing::Route,
+    sequential_writer::{self, SequentialWriter},
     type_cache::{TypeCache, TypeCacheShared},
-    MaybeIntoResponse, sequential_writer::{SequentialWriter, self},
+    MaybeIntoResponse,
 };
 
 const MIN_THREADS: usize = 4;
@@ -41,7 +44,7 @@ pub struct RequestTask {
     pub writer: SequentialWriter<TcpStream>,
 
     /// A handle to the applications router tree
-    pub router: Arc<Route>
+    pub router: Arc<Route>,
 }
 
 pub struct RequestState<'a> {
@@ -54,7 +57,7 @@ pub struct RequestState<'a> {
 struct Shared<Task> {
     /// Pool of tasks that need to be run
     pool: Mutex<VecDeque<Task>>,
-/// Conditional var used to sleep and wake threads
+    /// Conditional var used to sleep and wake threads
     condvar: Condvar,
 
     /// Total number of threads currently waiting for a task
@@ -211,7 +214,9 @@ fn handle_request(task: RequestTask) {
         }
     }
 
-    let _ = task.writer.send(&404u16.maybe_response().unwrap().into_raw_bytes());
+    let _ = task
+        .writer
+        .send(&404u16.maybe_response().unwrap().into_raw_bytes());
 }
 
 /// # Panics
@@ -222,7 +227,9 @@ fn handle_connection(task: ConnectionTask) {
         .expect("Shouldn't fail unless duration is 0");
 
     // FIXME panics if stream closed early
-    let mut writer = SequentialWriter::new(sequential_writer::State::Writer(task.stream.try_clone().unwrap()));
+    let mut writer = SequentialWriter::new(sequential_writer::State::Writer(
+        task.stream.try_clone().unwrap(),
+    ));
     let mut reader = BufReader::new(task.stream).lines();
 
     loop {

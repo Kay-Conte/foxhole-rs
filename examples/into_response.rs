@@ -1,4 +1,4 @@
-use vegemite::{run, sys, Get, IntoResponse, Route, Response, systems::Endpoint};
+use vegemite::{run, sys, systems::Endpoint, Get, IntoResponse, Response, Route};
 
 // This is a reimplementation of the provided `Html` type.
 struct Html {
@@ -30,7 +30,9 @@ fn favicon(_get: Get, _e: Endpoint) -> u16 {
 }
 
 fn main() {
-    let router = Route::empty().route("favicon.ico", sys![favicon]).route("page", sys![page]);
+    let router = Route::empty()
+        .route("favicon.ico", sys![favicon])
+        .route("page", sys![page]);
 
     run("127.0.0.1:5000", router);
 }

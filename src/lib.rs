@@ -18,10 +18,10 @@
 //! Vegemite is Simple, Fast, and Aimed at allowing you finish your projects.
 //!  
 //! # Features
-//! - Blazing fast performance, greater than [Axum](https://github.com/tokio-rs/axum) and [Actix](https://github.com/) for non keep-alive requests. [#5](/../../issues/5)
+//! - Blazing fast performance, greater than [Axum](https://github.com/tokio-rs/axum) and [Actix](https://github.com/actix/actix-web) for non keep-alive requests. [#5](/../../issues/5)
 //! - Built-in threading system that allows you to efficiently handle requests.
 //! - Absolutely no async elements, improving ergonomics.
-//!//!  - Minimal build size, 500kb when stripped.
+//! - Minimal build size, 500kb when stripped.
 //! - Uses `http` a model library you may already be familiar with
 //! - Magic function handlers! See [Getting Started](#getting-started)
 //! - Unique routing system
@@ -81,9 +81,7 @@
 //! pub struct Get;
 //! 
 //! impl Resolve for Get {
-//!     type Output = ResolveGuard<Self>;
-//! 
-//!     fn resolve(ctx: &mut Context) -> Self::Output {
+//!     fn resolve(ctx: &mut Context) -> ResolveGuard<Self> {
 //!         if ctx.request.method() == Method::GET {
 //!             ResolveGuard::Value(Get)
 //!         } else {
@@ -103,17 +101,15 @@
 //! 
 //! ### Example
 //! ```rs
-//! impl MaybeIntoResponse for u16 {
-//!     fn maybe_response(self) -> Option<RawResponse> {
-//!         Some(
-//!             Response::builder()
-//!                 .version(Version::HTTP_10)
-//!                 .status(self)
-//!                 .header("Content-Type", "text/plain; charset=UTF-8")
-//!                 .header("Content-Length", "0")
-//!                 .body(Vec::new())
-//!                 .expect("Failed to build request"),
-//!         )
+//! impl IntoResponse for u16 {
+//!     fn response(self) -> RawResponse {
+//!         Response::builder()
+//!             .version(Version::HTTP_10)
+//!             .status(self)
+//!             .header("Content-Type", "text/plain; charset=UTF-8")
+//!             .header("Content-Length", "0")
+//!             .body(Vec::new())
+//!             .expect("Failed to build request")
 //!     }
 //! }
 //! ```
@@ -131,13 +127,13 @@ pub mod routing;
 pub mod systems;
 pub mod type_cache;
 
-mod tasks;
 mod sequential_writer;
+mod tasks;
 
 pub use framework::run;
 pub use routing::Route;
-pub use systems::{Resolve, ResolveGuard, MaybeIntoResponse, IntoResponse, Get, Post};
+pub use systems::{Get, IntoResponse, MaybeIntoResponse, Post, Resolve, ResolveGuard};
 pub use tasks::RequestState;
 
 pub use http;
-pub use http::{Response, Request};
+pub use http::{Request, Response};

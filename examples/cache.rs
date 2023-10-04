@@ -2,7 +2,7 @@ use std::sync::{Arc, RwLock};
 
 use vegemite::{
     framework::run_with_cache,
-    systems::{Endpoint, Html, Query, DynSystem},
+    systems::{DynSystem, Endpoint, Html, Query},
     type_cache::{TypeCache, TypeCacheKey},
     Get, Route,
 };
