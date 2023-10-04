@@ -7,7 +7,7 @@ use std::{
 
 use crate::{
     routing::Route,
-    tasks::{ConnectionTask, RequestTask, TaskPool},
+    tasks::{ConnectionTask, TaskPool},
     type_cache::TypeCache,
 };
 
@@ -29,8 +29,7 @@ where
     let router = Arc::new(router);
     let type_cache = Arc::new(RwLock::new(type_cache));
 
-    let connection_pool = TaskPool::<ConnectionTask>::default();
-    let request_pool = Arc::new(TaskPool::<RequestTask>::default());
+    let task_pool = TaskPool::new();
 
     loop {
         let Ok((stream, _addr)) = incoming.accept() else {
@@ -38,12 +37,12 @@ where
         };
 
         let task = ConnectionTask {
-            request_pool: request_pool.clone(),
+            task_pool: task_pool.clone(),
             cache: type_cache.clone(),
             stream,
             router: router.clone(),
         };
 
-        connection_pool.send_task(task);
+        task_pool.send_task(task);
     }
 }

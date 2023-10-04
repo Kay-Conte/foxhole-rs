@@ -24,8 +24,12 @@ use crate::{
 const MIN_THREADS: usize = 4;
 const TIMEOUT: u64 = 5;
 
+pub trait Task {
+    fn run(self: Box<Self>);
+}
+
 pub struct ConnectionTask {
-    pub request_pool: Arc<TaskPool<RequestTask>>,
+    pub task_pool: TaskPool,
 
     /// An application global type cache
     pub cache: TypeCacheShared,
@@ -34,6 +38,46 @@ pub struct ConnectionTask {
 
     /// A handle to the applications router tree
     pub router: Arc<Route>,
+}
+
+impl Task for ConnectionTask {
+    fn run(self: Box<Self>) {
+        self.stream
+            .set_read_timeout(Some(Duration::from_secs(TIMEOUT)))
+            .expect("Shouldn't fail unless duration is 0");
+
+        // FIXME panics if stream closed early
+        let mut writer = SequentialWriter::new(sequential_writer::State::Writer(
+            self.stream.try_clone().unwrap(),
+        ));
+
+        let mut lines = BufReader::new(self.stream).lines();
+
+        loop {
+            match Request::take_request(&mut lines) {
+                Ok(req) => {
+                    self.task_pool.send_task(RequestTask {
+                        cache: self.cache.clone(),
+                        request: req,
+                        writer: writer.0,
+                        router: self.router.clone(),
+                    });
+
+                    writer = SequentialWriter::new(sequential_writer::State::Waiting(writer.1));
+
+                    // FIXME multiplexing is actually slower than closing the connection every time. I
+                    // think this may be something to do with incomplete http parsing.
+                    return;
+                }
+                Err(ParseError::MalformedRequest) => {
+                    continue;
+                }
+                Err(_) => {
+                    return;
+                }
+            }
+        }
+    }
 }
 
 pub struct RequestTask {
@@ -47,6 +91,49 @@ pub struct RequestTask {
     pub router: Arc<Route>,
 }
 
+impl Task for RequestTask {
+    fn run(self: Box<Self>) {
+        let path = self.request.uri().path().to_owned();
+
+        let mut path_iter = path.split("/").peekable();
+
+        path_iter.next();
+
+        let mut ctx = RequestState {
+            global_cache: self.cache.clone(),
+            local_cache: TypeCache::new(),
+            request: self.request,
+            path_iter,
+        };
+
+        let mut cursor = self.router.as_ref();
+
+        loop {
+            for system in cursor.systems() {
+                if let Some(r) = system.call(&mut ctx) {
+                    let _ = self.writer.send(&r.into_raw_bytes());
+
+                    return;
+                }
+            }
+
+            let Some(next) = ctx.path_iter.next() else {
+                break;
+            };
+
+            if let Some(child) = cursor.get_child(next) {
+                cursor = child;
+            } else {
+                break;
+            }
+        }
+
+        let _ = self
+            .writer
+            .send(&404u16.maybe_response().unwrap().into_raw_bytes());
+    }
+}
+
 pub struct RequestState<'a> {
     pub global_cache: TypeCacheShared,
     pub local_cache: TypeCache,
@@ -54,9 +141,9 @@ pub struct RequestState<'a> {
     pub path_iter: Peekable<Split<'a, &'static str>>,
 }
 
-struct Shared<Task> {
+struct Shared {
     /// Pool of tasks that need to be run
-    pool: Mutex<VecDeque<Task>>,
+    pool: Mutex<VecDeque<Box<dyn Task + Send + 'static>>>,
     /// Conditional var used to sleep and wake threads
     condvar: Condvar,
 
@@ -64,7 +151,7 @@ struct Shared<Task> {
     waiting_tasks: AtomicUsize,
 }
 
-impl<Task> Shared<Task> {
+impl Shared {
     fn waiting(&self) {
         self.waiting_tasks.fetch_add(1, Ordering::Release);
     }
@@ -74,35 +161,19 @@ impl<Task> Shared<Task> {
     }
 }
 
-pub struct TaskPool<Task> {
-    shared: Arc<Shared<Task>>,
-    handler: fn(Task),
+#[derive(Clone)]
+pub struct TaskPool {
+    shared: Arc<Shared>,
 }
-
-impl Default for TaskPool<ConnectionTask> {
-    fn default() -> Self {
-        Self::new(handle_connection)
-    }
-}
-
-impl Default for TaskPool<RequestTask> {
-    fn default() -> Self {
-        Self::new(handle_request)
-    }
-}
-
-impl<Task> TaskPool<Task>
-where
-    Task: 'static + Send,
-{
-    pub fn new(handler: fn(Task)) -> Self {
+ 
+impl TaskPool {
+    pub fn new() -> Self {
         let pool = TaskPool {
             shared: Arc::new(Shared {
                 pool: Mutex::new(VecDeque::new()),
                 condvar: Condvar::new(),
                 waiting_tasks: AtomicUsize::new(0),
             }),
-            handler,
         };
 
         for _ in 0..MIN_THREADS {
@@ -123,8 +194,6 @@ where
     fn spawn_thread(&self, should_cull: bool) {
         let shared = self.shared.clone();
 
-        let handler = self.handler.clone();
-
         std::thread::spawn(move || {
             loop {
                 let mut pool = shared.pool.lock().unwrap();
@@ -139,9 +208,7 @@ where
 
                     if timeout.timed_out() {
                         // Make sure not to bloat waiting count
-                        shared.release();
-
-                        return;
+                        break;
                     }
 
                     pool = new;
@@ -157,8 +224,9 @@ where
 
                 drop(pool);
 
-                handler(task);
+                task.run();
             }
+            shared.release()
         });
     }
 
@@ -167,93 +235,15 @@ where
     /// # Panics
     /// This function can panic if the mutex is poisoned. Mutex poisoning will likely remain
     /// unhandled in the foreseeable future until a graceful shutdown mechanism is provided.
-    pub fn send_task(&self, task: Task) {
-        self.shared.pool.lock().unwrap().push_back(task);
+    pub fn send_task<T>(&self, task: T) where T: Task + Send + 'static {
+        self.shared.pool.lock().unwrap().push_back(Box::new(task));
+
+        println!("{}", self.shared.waiting_tasks.load(Ordering::Acquire));
 
         if self.shared.waiting_tasks.load(Ordering::Acquire) == 0 {
             self.spawn_thread(true);
         }
 
         self.shared.condvar.notify_one();
-    }
-}
-
-fn handle_request(task: RequestTask) {
-    let path = task.request.uri().path().to_owned();
-
-    let mut path_iter = path.split("/").peekable();
-
-    path_iter.next();
-
-    let mut ctx = RequestState {
-        global_cache: task.cache.clone(),
-        local_cache: TypeCache::new(),
-        request: task.request,
-        path_iter,
-    };
-
-    let mut cursor = task.router.as_ref();
-
-    loop {
-        for system in cursor.systems() {
-            if let Some(r) = system.call(&mut ctx) {
-                let _ = task.writer.send(&r.into_raw_bytes());
-
-                return;
-            }
-        }
-
-        let Some(next) = ctx.path_iter.next() else {
-            break;
-        };
-
-        if let Some(child) = cursor.get_child(next) {
-            cursor = child;
-        } else {
-            break;
-        }
-    }
-
-    let _ = task
-        .writer
-        .send(&404u16.maybe_response().unwrap().into_raw_bytes());
-}
-
-/// # Panics
-/// Panics if the stream is closed early. This will be fixed.
-fn handle_connection(task: ConnectionTask) {
-    task.stream
-        .set_read_timeout(Some(Duration::from_secs(TIMEOUT)))
-        .expect("Shouldn't fail unless duration is 0");
-
-    // FIXME panics if stream closed early
-    let mut writer = SequentialWriter::new(sequential_writer::State::Writer(
-        task.stream.try_clone().unwrap(),
-    ));
-    let mut reader = BufReader::new(task.stream).lines();
-
-    loop {
-        match Request::take_request(&mut reader) {
-            Ok(req) => {
-                task.request_pool.send_task(RequestTask {
-                    cache: task.cache.clone(),
-                    request: req,
-                    writer: writer.0,
-                    router: task.router.clone(),
-                });
-
-                writer = SequentialWriter::new(sequential_writer::State::Waiting(writer.1));
-
-                // FIXME multiplexing is actually slower than closing the connection every time. I
-                // think this may be something to do with incomplete http parsing.
-                return;
-            }
-            Err(ParseError::MalformedRequest) => {
-                continue;
-            }
-            Err(_) => {
-                return;
-            }
-        }
     }
 }
