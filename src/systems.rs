@@ -160,7 +160,12 @@ where
     K::Value: Clone,
 {
     fn resolve(ctx: &mut RequestState) -> ResolveGuard<Self> {
-        ctx.global_cache.read().unwrap().get::<K>().map(|v| Query(v.clone())).into()
+        ctx.global_cache
+            .read()
+            .unwrap()
+            .get::<K>()
+            .map(|v| Query(v.clone()))
+            .into()
     }
 }
 
@@ -193,7 +198,6 @@ pub struct UrlCollect(pub Vec<String>);
 
 impl Resolve for UrlCollect {
     fn resolve(ctx: &mut RequestState) -> ResolveGuard<Self> {
-
         let mut collect = Vec::new();
 
         while let Some(part) = ctx.path_iter.next() {

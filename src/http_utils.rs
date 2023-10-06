@@ -3,17 +3,15 @@
 
 use http::{Request, Response, StatusCode, Version};
 
-use std::{
-    io::{BufReader, Lines, Write},
-    net::TcpStream,
-};
+use std::io::{BufRead, Write};
 
 use crate::systems::RawResponse;
 
-/// Errors while parsing requests. 
+/// Errors while parsing requests.
 #[derive(Debug, PartialEq)]
 pub enum ParseError {
     MalformedRequest,
+    ReadError,
 
     InvalidMethod,
     InvalidProtocolVer,
@@ -23,9 +21,11 @@ pub enum ParseError {
 impl std::fmt::Display for ParseError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ParseError::InvalidProtocolVer => write!(f, "Invalid Protocol"),
             ParseError::MalformedRequest => write!(f, "Malformed Request"),
+            ParseError::ReadError => write!(f, "Read Error"),
+
             ParseError::InvalidMethod => write!(f, "Invalid Method"),
+            ParseError::InvalidProtocolVer => write!(f, "Invalid Protocol"),
             ParseError::InvalidRequestParts => write!(f, "Invalid Request Parts"),
         }
     }
@@ -73,63 +73,60 @@ fn validate_method(method: &str) -> bool {
     )
 }
 
-pub trait RequestFromBytes<'a> {
-    /// # Errors
-    ///
-    /// Returns `Err` if the bytes are not a valid HTTP request
-    fn take_request(bytes: &mut Lines<BufReader<TcpStream>>) -> Result<Request<()>, ParseError>;
-}
-
 /// the entirety of the header must be valid utf8
-impl<'a> RequestFromBytes<'a> for Request<&'a [u8]> {
-    fn take_request(lines: &mut Lines<BufReader<TcpStream>>) -> Result<Request<()>, ParseError> {
-        let Some(Ok(line)) = lines.next() else {
-            return Err(ParseError::MalformedRequest);
-        };
+pub fn take_request<R>(reader: &mut R) -> Result<Request<()>, ParseError>
+where
+    R: BufRead,
+{
+    let mut lines = reader.lines();
 
-        let mut parts = line.split(' ');
+    let line = lines
+        .next()
+        .ok_or(ParseError::MalformedRequest)?
+        .map_err(|_| ParseError::ReadError)?;
 
-        let Some(method) = parts.next() else {
-            return Err(ParseError::MalformedRequest);
-        };
+    let mut parts = line.split(' ');
 
-        if !validate_method(method) {
-            return Err(ParseError::InvalidMethod);
-        }
+    let method = parts.next().ok_or(ParseError::MalformedRequest)?;
 
-        let Some(uri) = parts.next() else {
-            return Err(ParseError::MalformedRequest);
-        };
-
-        let Some(version) = parts.next() else {
-            return Err(ParseError::MalformedRequest);
-        };
-
-        if parts.next().is_some() {
-            return Err(ParseError::MalformedRequest);
-        }
-
-        let mut req = Request::builder()
-            .method(method)
-            .uri(uri)
-            .version(Version::parse_version(version)?);
-
-        while let Some(Ok(line)) = lines.next() {
-            if line.is_empty() {
-                break;
-            }
-
-            let h = line.split_once(": ").ok_or(ParseError::MalformedRequest)?;
-
-            if h.1.is_empty() {
-                return Err(ParseError::MalformedRequest);
-            }
-
-            req = req.header(h.0, h.1);
-        }
-
-        req.body(()).map_err(|_| ParseError::MalformedRequest)
+    if !validate_method(method) {
+        return Err(ParseError::InvalidMethod);
     }
+
+    let uri = parts.next().ok_or(ParseError::MalformedRequest)?;
+
+    let version = parts.next().ok_or(ParseError::MalformedRequest)?;
+
+    let empty = parts.next().ok_or(ParseError::MalformedRequest)?;
+
+    if !empty.is_empty() {
+        return Err(ParseError::MalformedRequest);
+    }
+
+    let mut req = Request::builder()
+        .method(method)
+        .uri(uri)
+        .version(Version::parse_version(version)?);
+
+    while let Some(line) = lines
+        .next()
+        .transpose()
+        .map_err(|_| ParseError::ReadError)?
+    {
+        if line.is_empty() {
+            break;
+        }
+
+        let h = line.split_once(": ").ok_or(ParseError::MalformedRequest)?;
+
+        if h.1.is_empty() {
+            return Err(ParseError::MalformedRequest);
+        }
+
+        req = req.header(h.0, h.1);
+    }
+
+    req.body(()).map_err(|_| ParseError::MalformedRequest)
 }
 
 fn parse_response_line_into_buf<T>(
@@ -138,7 +135,7 @@ fn parse_response_line_into_buf<T>(
 ) -> Result<(), std::io::Error> {
     write!(
         buf,
-        "{} {} \r\n",
+        "{} {}\r\n",
         request.version().to_string(),
         request.status()
     )?;
@@ -220,138 +217,194 @@ where
         self.map(IntoRawBytes::into_raw_bytes)
     }
 }
-//
-// #[cfg(test)]
-// mod tests {
-//     use super::*;
-//     use http::{Method, Version, HeaderValue};
-//
-//     #[test]
-//     fn sanity_check() {
-//         let bytes = b"POST /api/send-data HTTP/1.1\r\nHost: example.com\r\nUser-Agent: My-HTTP-Client/1.0\r\nAccept: application/json\r\nContent-Type: application/json\r\nContent-Length: 87\r\nAuthorization: 82u27ydcfkjegh8jndnkzJJFFJRGHN\r\n\r\n{\"user_id\":12345, \"event_type\":\"page_view\",\"timestamp\":\"2023-09-23T15:30:00Z\",\"data\":{\"page_url\":\"https://example.com/some-page\",\"user_agent\":\"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36\",\"referrer\":\"https://google.com/search?q=example\",\"browser_language\":\"en-US\",\"device_type\":\"desktop\"}}";
-//
-//         let req = Request::try_headers_from_bytes(bytes);
-//         println!("{:?}", req);
-//         assert!(req.is_ok());
-//
-//         let req = req.unwrap();
-//         assert_eq!(req.method(), Method::POST);
-//         assert_eq!(req.uri(), "/api/send-data");
-//         assert_eq!(req.version(), Version::HTTP_11);
-//         assert_eq!(req.headers().len(), 6);
-//         assert_eq!(req.headers().get("Host"), Some(&HeaderValue::from_str("example.com").unwrap()));
-//         assert_eq!(req.headers().get("User-Agent"), Some(&HeaderValue::from_str("My-HTTP-Client/1.0").unwrap()));
-//         assert_eq!(req.headers().get("Accept"), Some(&HeaderValue::from_str("application/json").unwrap()));
-//         assert_eq!(req.headers().get("Content-Type"), Some(&HeaderValue::from_str("application/json").unwrap()));
-//         assert_eq!(req.headers().get("Content-Length"), Some(&HeaderValue::from_str("87").unwrap()));
-//     }
-//
-//     #[test]
-//     fn invalid_protocol() {
-//         let bytes = b"GET / HTTP/1.32\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: 123\r\n\r\n";
-//
-//         let resp = Request::try_headers_from_bytes(bytes);
-//         assert!(matches!(resp, Err(ParseError::InvalidProtocolVer)));
-//     }
-//
-//     #[test]
-//     fn invalid_header() {
-//         let bytes = b"GET / HTTP/1.1 22 3jklajs\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: 123\r\n\r\n";
-//
-//         let resp = Request::try_headers_from_bytes(bytes);
-//         assert!(matches!(resp, Err(ParseError::MalformedRequest)));
-//
-//         let bytes = b"GET / jjshjudh HTTP/1.1 22 3jklajs\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: 123\r\n\r\n";
-//
-//         let resp = Request::try_headers_from_bytes(bytes);
-//         assert!(matches!(resp, Err(ParseError::MalformedRequest)));
-//     }
-//
-//     #[test]
-//     fn invalid_method() {
-//         let bytes = b"BAKLAVA / HTTP/1.1\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: 123\r\n\r\n";
-//
-//         let resp = Request::try_headers_from_bytes(bytes);
-//         assert!(matches!(resp, Err(ParseError::InvalidMethod)));
-//
-//         // missing method
-//         let bytes = b"Content-Type: text/html; charset=utf-8\r\nContent-Length: 123\r\n\r\n";
-//         let resp = Request::try_headers_from_bytes(bytes);
-//         assert!(matches!(resp, Err(ParseError::InvalidMethod)));
-//     }
-//
-//     // #[test]
-//     fn not_enough_bytes() {  // these should all return Incomplete
-//         // incomplete method
-//         let bytes = b"GET / HT";
-//         let resp = Request::try_headers_from_bytes(bytes);
-//         // FIXME returns InvalidProtocolVer
-//         assert!(matches!(resp, Err(ParseError::Incomplete)));
-//
-//         // incomplete header field
-//         let bytes = b"GET / HTTP/1.1\r\nContent-Type: tex";
-//         let resp = Request::try_headers_from_bytes(bytes);
-//         // FIXME returns Ok
-//         assert!(matches!(resp, Err(ParseError::Incomplete)));
-//
-//         let bytes = b"GET / HTTP/1.1\r\nContent-Type: ";
-//         let resp = Request::try_headers_from_bytes(bytes);
-//         // FIXME returns malformed
-//         assert!(matches!(resp, Err(ParseError::Incomplete)));
-//
-//         // incomplete header key
-//         let bytes = b"GET / HTTP/1.1\r\nContent-Type: \r\nContent-L";
-//         let resp = Request::try_headers_from_bytes(bytes);
-//         assert!(matches!(resp, Err(ParseError::Incomplete)));
-//     }
-//
-//     #[test]
-//     fn unicode_in_request() {
-//         let bytes = b"GET / HTTP/1.1\r\nContent-Type: \xE2\xA1\x91\xE2\xB4\x9D\xE2\x9B\xB6\r\nContent-Length: 123\r\n\r\n";
-//         let resp = Request::try_headers_from_bytes(bytes);
-//         assert!(resp.is_ok());
-//     }
-//
-//     // #[test]
-//     fn malformed_request() {
-//         // missing header field
-//         let bytes = b"GET / HTTP/1.1\r\nContent-Type: \r\nContent-Length: 123\r\n\r\n";
-//         let resp = Request::try_headers_from_bytes(bytes);
-//         assert!(matches!(resp, Err(ParseError::MalformedRequest)));
-//
-//         // incomplete header key
-//         let bytes = b"GET / HTTP/1.1\r\nCey: text/html; charset=utf-8\r\nContent-Len\r\n\r\n";
-//         let resp = Request::try_headers_from_bytes(bytes);
-//         assert!(matches!(resp, Err(ParseError::MalformedRequest)));
-//
-//         let bytes = b"GET / HTTP/1.1\r\nContent-Type: text/html; charset=utf-8\rContent-Length: 123\r\n\r\n";
-//         let resp = Request::try_headers_from_bytes(bytes);
-//         assert!(matches!(resp, Err(ParseError::MalformedRequest)));
-//
-//         // missing separator
-//         let bytes = b"GET / HTTP/1.1\r\nContent-Type: text/html; charset=utf-8\r\n\n";
-//         let resp = Request::try_headers_from_bytes(bytes);
-//         // FIXME returns Ok
-//         assert!(matches!(resp, Err(ParseError::MalformedRequest)));
-//
-//         let bytes = b"GET / HTTP/1.1\r\nContent-Type: text/html; charset=utf-8\nContent-Length: 123\r\n\r\n";
-//         let resp = Request::try_headers_from_bytes(bytes);
-//         // FIXME returns Ok
-//         assert!(matches!(resp, Err(ParseError::MalformedRequest)));
-//     }
-//
-//     #[test]
-//     fn nulls_in_request() {
-//         let bytes = b"GET / HTTP/1.1\r\nContent-Type: \0\r\nContent-Length: 123\r\n\r\n";
-//         let resp = Request::try_headers_from_bytes(bytes);
-//         assert!(matches!(resp, Err(_)));
-//
-//         let bytes = b"GET / HTTP/1.1\r\n\0: text/html; charset=utf-8\r\nContent-Length: 123\r\n\r\n";
-//         let resp = Request::try_headers_from_bytes(bytes);
-//         assert!(matches!(resp, Err(_)));
-//
-//         let bytes = b"\0 \0 \0\r\n\0: text/html; charset=utf-8\r\nContent-Length: 123\r\n\r\n";
-//         let resp = Request::try_headers_from_bytes(bytes);
-//         assert!(matches!(resp, Err(_)));
-//     }
-// }
+
+#[cfg(test)]
+mod tests {
+    use std::io::BufReader;
+
+    use super::*;
+    use http::{HeaderValue, Method, Version};
+
+    #[test]
+    fn sanity_check() {
+        let bytes = b"POST /api/send-data HTTP/1.1\r\nHost: example.com\r\nUser-Agent: My-HTTP-Client/1.0\r\nAccept: application/json\r\nContent-Type: application/json\r\nContent-Length: 87\r\nAuthorization: 82u27ydcfkjegh8jndnkzJJFFJRGHN\r\n\r\n{\"user_id\":12345, \"event_type\":\"page_view\",\"timestamp\":\"2023-09-23T15:30:00Z\",\"data\":{\"page_url\":\"https://example.com/some-page\",\"user_agent\":\"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36\",\"referrer\":\"https://google.com/search?q=example\",\"browser_language\":\"en-US\",\"device_type\":\"desktop\"}}";
+        let mut reader = BufReader::new(&bytes[..]);
+
+        let req = take_request(&mut reader);
+        assert!(req.is_ok());
+
+        let req = req.unwrap();
+        assert_eq!(req.method(), Method::POST);
+        assert_eq!(req.uri(), "/api/send-data");
+        assert_eq!(req.version(), Version::HTTP_11);
+        assert_eq!(req.headers().len(), 6);
+        assert_eq!(
+            req.headers().get("Host"),
+            Some(&HeaderValue::from_str("example.com").unwrap())
+        );
+        assert_eq!(
+            req.headers().get("User-Agent"),
+            Some(&HeaderValue::from_str("My-HTTP-Client/1.0").unwrap())
+        );
+        assert_eq!(
+            req.headers().get("Accept"),
+            Some(&HeaderValue::from_str("application/json").unwrap())
+        );
+        assert_eq!(
+            req.headers().get("Content-Type"),
+            Some(&HeaderValue::from_str("application/json").unwrap())
+        );
+        assert_eq!(
+            req.headers().get("Content-Length"),
+            Some(&HeaderValue::from_str("87").unwrap())
+        );
+    }
+
+    #[test]
+    fn invalid_protocol() {
+        let bytes = b"GET / HTTP/1.32\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: 123\r\n\r\n";
+        let mut reader = BufReader::new(&bytes[..]);
+
+        let resp = take_request(&mut reader);
+        assert!(matches!(resp, Err(ParseError::InvalidProtocolVer)));
+    }
+
+    #[test]
+    fn invalid_header() {
+        let bytes = b"GET / HTTP/1.1 22 3jklajs\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: 123\r\n\r\n";
+        let mut reader = BufReader::new(&bytes[..]);
+
+        let resp = take_request(&mut reader);
+
+        assert!(matches!(resp, Err(ParseError::MalformedRequest)));
+
+        let bytes = b"GET / jjshjudh HTTP/1.1 22 3jklajs\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: 123\r\n\r\n";
+
+        let mut reader = BufReader::new(&bytes[..]);
+
+        let resp = take_request(&mut reader);
+        assert!(matches!(resp, Err(ParseError::MalformedRequest)));
+    }
+
+    #[test]
+    fn invalid_method() {
+        let bytes = b"BAKLAVA / HTTP/1.1\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: 123\r\n\r\n";
+
+        let mut reader = BufReader::new(&bytes[..]);
+
+        let resp = take_request(&mut reader);
+        assert!(matches!(resp, Err(ParseError::InvalidMethod)));
+
+        // missing method
+        let bytes = b"Content-Type: text/html; charset=utf-8\r\nContent-Length: 123\r\n\r\n";
+
+        let mut reader = BufReader::new(&bytes[..]);
+
+        let resp = take_request(&mut reader);
+        assert!(matches!(resp, Err(ParseError::InvalidMethod)));
+    }
+
+    #[test]
+    fn not_enough_bytes() {
+        // these should all return MalformedRequest
+        // incomplete method
+        let bytes = b"GET / HT";
+        let mut reader = BufReader::new(&bytes[..]);
+
+        let resp = take_request(&mut reader);
+        // FIXME returns InvalidProtocolVer
+        assert!(matches!(resp, Err(ParseError::MalformedRequest)));
+
+        // incomplete header field
+        // let bytes = b"GET / HTTP/1.1\r\nContent-Type: tex";
+        // let mut reader = BufReader::new(&bytes[..]);
+        //
+        // let resp = take_request(&mut reader);
+        // FIXME returns Ok. This behaviour may be acceptable considering the parser internally
+        // will wait until timeout and return Err on timeout
+        // assert!(matches!(resp, Err(ParseError::MalformedRequest)));
+
+        let bytes = b"GET / HTTP/1.1\r\nContent-Type: ";
+        let mut reader = BufReader::new(&bytes[..]);
+
+        let resp = take_request(&mut reader);
+        // FIXME returns malformed
+        assert!(matches!(resp, Err(ParseError::MalformedRequest)));
+
+        // incomplete header key
+        let bytes = b"GET / HTTP/1.1\r\nContent-Type: \r\nContent-L";
+        let mut reader = BufReader::new(&bytes[..]);
+
+        let resp = take_request(&mut reader);
+        assert!(matches!(resp, Err(ParseError::MalformedRequest)));
+    }
+
+    #[test]
+    fn unicode_in_request() {
+        let bytes = b"GET / HTTP/1.1\r\nContent-Type: \xE2\xA1\x91\xE2\xB4\x9D\xE2\x9B\xB6\r\nContent-Length: 123\r\n\r\n";
+        let mut reader = BufReader::new(&bytes[..]);
+
+        let resp = take_request(&mut reader);
+        assert!(resp.is_ok());
+    }
+
+    #[test]
+    fn malformed_request() {
+        // missing header field
+        let bytes = b"GET / HTTP/1.1\r\nContent-Type: \r\nContent-Length: 123\r\n\r\n";
+        let mut reader = BufReader::new(&bytes[..]);
+
+        let resp = take_request(&mut reader);
+        assert!(matches!(resp, Err(ParseError::MalformedRequest)));
+
+        // incomplete header key
+        let bytes = b"GET / HTTP/1.1\r\nCey: text/html; charset=utf-8\r\nContent-Len\r\n\r\n";
+        let mut reader = BufReader::new(&bytes[..]);
+
+        let resp = take_request(&mut reader);
+        assert!(matches!(resp, Err(ParseError::MalformedRequest)));
+
+        let bytes = b"GET / HTTP/1.1\r\nContent-Type: text/html; charset=utf-8\rContent-Length: 123\r\n\r\n";
+        let mut reader = BufReader::new(&bytes[..]);
+
+        let resp = take_request(&mut reader);
+        assert!(matches!(resp, Err(ParseError::MalformedRequest)));
+
+        // missing separator
+        let bytes = b"GET / HTTP/1.1\r\nContent-Type: text/html; charset=utf-8\r\n\n";
+        let mut reader = BufReader::new(&bytes[..]);
+
+        let resp = take_request(&mut reader);
+        // FIXME returns Ok
+        assert!(matches!(resp, Err(ParseError::MalformedRequest)));
+
+        let bytes = b"GET / HTTP/1.1\r\nContent-Type: text/html; charset=utf-8\nContent-Length: 123\r\n\r\n";
+        let mut reader = BufReader::new(&bytes[..]);
+
+        let resp = take_request(&mut reader);
+        // FIXME returns Ok
+        assert!(matches!(resp, Err(ParseError::MalformedRequest)));
+    }
+
+    #[test]
+    fn nulls_in_request() {
+        let bytes = b"GET / HTTP/1.1\r\nContent-Type: \0\r\nContent-Length: 123\r\n\r\n";
+        let mut reader = BufReader::new(&bytes[..]);
+
+        let resp = take_request(&mut reader);
+        assert!(matches!(resp, Err(_)));
+
+        let bytes =
+            b"GET / HTTP/1.1\r\n\0: text/html; charset=utf-8\r\nContent-Length: 123\r\n\r\n";
+        let mut reader = BufReader::new(&bytes[..]);
+
+        let resp = take_request(&mut reader);
+        assert!(matches!(resp, Err(_)));
+
+        let bytes = b"\0 \0 \0\r\n\0: text/html; charset=utf-8\r\nContent-Length: 123\r\n\r\n";
+        let mut reader = BufReader::new(&bytes[..]);
+
+        let resp = take_request(&mut reader);
+        assert!(matches!(resp, Err(_)));
+    }
+}

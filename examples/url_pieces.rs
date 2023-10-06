@@ -1,8 +1,8 @@
 use vegemite::{
     http_utils::IntoRawBytes,
-    sys,
+    run, sys,
     systems::{Endpoint, UrlCollect, UrlPart},
-    Get, IntoResponse, Response, Route, run,
+    Get, IntoResponse, Response, Route,
 };
 
 pub struct User(String);

@@ -4,14 +4,14 @@
 //!     <strong>A Synchronous HTTP framework for Rust</strong>
 //!   </p>
 //!   <p>
-//! 
+//!
 //! ![Minimum Supported Rust Version](https://img.shields.io/badge/rustc-1.65+-ab6000.svg)
 //! [![Crates.io](https://img.shields.io/crates/v/vegemite.svg)](https://crates.io/crates/vegemite)
 //! [![Docs.rs](https://docs.rs/vegemite/badge.svg)](https://docs.rs/vegemite)
 //! ![Code Size](https://img.shields.io/github/languages/code-size/Kay-Conte/vegemite-rs)
 //! ![Maintained](https://img.shields.io/maintenance/yes/2023?style=flat-square)
 //! [![License](https://img.shields.io/crates/l/vegemite.svg)](https://opensource.org/licenses/MIT)
-//! 
+//!
 //!   </p>
 //! </div>
 //!  
@@ -45,41 +45,41 @@
 //!         .status(200)
 //!         .body(content)
 //!         .unwrap()
-//! } 
+//! }
 //!  
 //! fn main() {
 //!     let router = Route::new(sys![get]);
 //!  
 //!     run("127.0.0.1:8080", router);
-//! } 
+//! }
 //! ```
-//! 
+//!
 //! Let's break this down into its components.
-//! 
+//!
 //! ## Routing
-//! 
-//! The router will step through the page by its parts, first starting with the route. It will try to run **all** systems of every node it steps through. Once a response is received it will stop stepping over the request. 
-//! 
+//!
+//! The router will step through the page by its parts, first starting with the route. It will try to run **all** systems of every node it steps through. Once a response is received it will stop stepping over the request.
+//!
 //! lets assume we have the router `Route::new(sys![auth]).route("page", Route::new(sys![get_page]))` and the request `/page`
-//! 
+//!
 //! In this example, we will first call `auth` if auth returns a response, say the user is not authorized and we would like to respond early, then we stop there. Otherwise we continue to the next node `get_page`
-//! 
+//!
 //! If no responses are returned the server will automatically return `404`. This will be configuarable in the future.
-//! 
+//!
 //! ## Parameters/Guards
-//! 
-//! Function parameters can act as both getters and guards in `vegemite`. 
-//! 
-//! In the example above, `Get` acts as a guard to make sure the system is only run on `GET` requests. 
-//! 
-//! Any type that implements the trait `Resolve<Output = ResolveGuard<Self>>` is viable to use as a parameter. 
-//! 
+//!
+//! Function parameters can act as both getters and guards in `vegemite`.
+//!
+//! In the example above, `Get` acts as a guard to make sure the system is only run on `GET` requests.
+//!
+//! Any type that implements the trait `Resolve<Output = ResolveGuard<Self>>` is viable to use as a parameter.
+//!
 //! `vegemite` will try to provide the most common guards and getters you will use but few are implemented currenty.
-//! 
+//!
 //! ### Example
 //! ```rs
 //! pub struct Get;
-//! 
+//!
 //! impl Resolve for Get {
 //!     fn resolve(ctx: &mut Context) -> ResolveGuard<Self> {
 //!         if ctx.request.method() == Method::GET {
@@ -90,15 +90,15 @@
 //!     }
 //! }
 //! ```
-//! 
+//!
 //! ## Return types
-//! 
-//! Systems are required to return a value that implements `MaybeIntoResponse`. 
-//! 
-//! Additionally note the existence of `IntoResponse` which auto impls `MaybeIntoResponse` for any types that *always* return a response. 
-//! 
+//!
+//! Systems are required to return a value that implements `MaybeIntoResponse`.
+//!
+//! Additionally note the existence of `IntoResponse` which auto impls `MaybeIntoResponse` for any types that *always* return a response.
+//!
 //! If a type returns `None` out of `MaybeIntoResponse` a response will not be sent and routing will continue to further nodes.
-//! 
+//!
 //! ### Example
 //! ```rs
 //! impl IntoResponse for u16 {

@@ -1,6 +1,6 @@
 use std::{
     collections::VecDeque,
-    io::{BufRead, BufReader},
+    io::BufReader,
     iter::Peekable,
     net::TcpStream,
     str::Split,
@@ -14,7 +14,7 @@ use std::{
 use http::Request;
 
 use crate::{
-    http_utils::{IntoRawBytes, ParseError, RequestFromBytes},
+    http_utils::{take_request, IntoRawBytes},
     routing::Route,
     sequential_writer::{self, SequentialWriter},
     type_cache::{TypeCache, TypeCacheShared},
@@ -51,10 +51,10 @@ impl Task for ConnectionTask {
             self.stream.try_clone().unwrap(),
         ));
 
-        let mut lines = BufReader::new(self.stream).lines();
+        let mut reader = BufReader::new(self.stream);
 
         loop {
-            match Request::take_request(&mut lines) {
+            match take_request(&mut reader) {
                 Ok(req) => {
                     self.task_pool.send_task(RequestTask {
                         cache: self.cache.clone(),
@@ -64,13 +64,6 @@ impl Task for ConnectionTask {
                     });
 
                     writer = SequentialWriter::new(sequential_writer::State::Waiting(writer.1));
-
-                    // FIXME multiplexing is actually slower than closing the connection every time. I
-                    // think this may be something to do with incomplete http parsing.
-                    return;
-                }
-                Err(ParseError::MalformedRequest) => {
-                    continue;
                 }
                 Err(_) => {
                     return;
@@ -165,7 +158,7 @@ impl Shared {
 pub struct TaskPool {
     shared: Arc<Shared>,
 }
- 
+
 impl TaskPool {
     pub fn new() -> Self {
         let pool = TaskPool {
@@ -235,10 +228,11 @@ impl TaskPool {
     /// # Panics
     /// This function can panic if the mutex is poisoned. Mutex poisoning will likely remain
     /// unhandled in the foreseeable future until a graceful shutdown mechanism is provided.
-    pub fn send_task<T>(&self, task: T) where T: Task + Send + 'static {
+    pub fn send_task<T>(&self, task: T)
+    where
+        T: Task + Send + 'static,
+    {
         self.shared.pool.lock().unwrap().push_back(Box::new(task));
-
-        println!("{}", self.shared.waiting_tasks.load(Ordering::Acquire));
 
         if self.shared.waiting_tasks.load(Ordering::Acquire) < MIN_THREADS {
             self.spawn_thread(true);

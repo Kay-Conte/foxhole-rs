@@ -2,9 +2,10 @@ use std::sync::{Arc, RwLock};
 
 use vegemite::{
     framework::run_with_cache,
+    sys,
     systems::{Endpoint, Html, Query},
     type_cache::{TypeCache, TypeCacheKey},
-    Get, Route, sys,
+    Get, Route,
 };
 
 pub struct Counter(u32);
