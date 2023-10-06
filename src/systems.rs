@@ -4,10 +4,14 @@ use crate::{http_utils::IntoRawBytes, tasks::RequestState, type_cache::TypeCache
 
 pub type RawResponse = Response<Vec<u8>>;
 
+
 pub trait IntoResponse {
     fn response(self) -> RawResponse;
 }
 
+/// All `System`s must return a type implementing `MaybeIntoResponse`. This trait dictates the
+/// expected behaviour of the underlying router. If this method returns `None` the router will
+/// continue. If it receives `Some` value, it will respond to the connection and stop routing.
 pub trait MaybeIntoResponse {
     fn maybe_response(self) -> Option<RawResponse>;
 }
@@ -86,7 +90,8 @@ impl IntoResponse for Html {
     }
 }
 
-/// `Resolve` is a trait
+/// `Resolve` is a trait used to construct values needed to call a given `System`. All parameters
+/// of a `System` must implement `Resolve` to be valid.
 pub trait Resolve: Sized {
     fn resolve(ctx: &mut RequestState) -> ResolveGuard<Self>;
 }
@@ -194,6 +199,9 @@ impl Resolve for UrlPart {
     }
 }
 
+/// Collect the entire remaining url into a `Vec` Note that this will happen on call to its
+/// `resolve` method so ordering of parameters matter. Place any necessary guards before this
+/// method.
 pub struct UrlCollect(pub Vec<String>);
 
 impl Resolve for UrlCollect {
@@ -208,10 +216,12 @@ impl Resolve for UrlCollect {
     }
 }
 
+#[doc(hidden)]
 pub trait System<T> {
     fn run(self, ctx: &mut RequestState) -> Option<RawResponse>;
 }
 
+#[doc(hidden)]
 pub struct DynSystem {
     inner: Box<dyn Fn(&mut RequestState) -> Option<RawResponse> + 'static + Send + Sync>,
 }
