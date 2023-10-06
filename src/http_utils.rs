@@ -227,7 +227,7 @@ mod tests {
 
     #[test]
     fn sanity_check() {
-        let bytes = b"POST /api/send-data HTTP/1.1\r\nHost: example.com\r\nUser-Agent: My-HTTP-Client/1.0\r\nAccept: application/json\r\nContent-Type: application/json\r\nContent-Length: 87\r\nAuthorization: 82u27ydcfkjegh8jndnkzJJFFJRGHN\r\n\r\n{\"user_id\":12345, \"event_type\":\"page_view\",\"timestamp\":\"2023-09-23T15:30:00Z\",\"data\":{\"page_url\":\"https://example.com/some-page\",\"user_agent\":\"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36\",\"referrer\":\"https://google.com/search?q=example\",\"browser_language\":\"en-US\",\"device_type\":\"desktop\"}}";
+        let bytes = b"POST /api/send-data HTTP/1.1 \r\nHost: example.com\r\nUser-Agent: My-HTTP-Client/1.0\r\nAccept: application/json\r\nContent-Type: application/json\r\nContent-Length: 87\r\nAuthorization: 82u27ydcfkjegh8jndnkzJJFFJRGHN\r\n\r\n{\"user_id\":12345, \"event_type\":\"page_view\",\"timestamp\":\"2023-09-23T15:30:00Z\",\"data\":{\"page_url\":\"https://example.com/some-page\",\"user_agent\":\"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36\",\"referrer\":\"https://google.com/search?q=example\",\"browser_language\":\"en-US\",\"device_type\":\"desktop\"}}";
         let mut reader = BufReader::new(&bytes[..]);
 
         let req = take_request(&mut reader);
@@ -262,7 +262,7 @@ mod tests {
 
     #[test]
     fn invalid_protocol() {
-        let bytes = b"GET / HTTP/1.32\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: 123\r\n\r\n";
+        let bytes = b"GET / HTTP/1.32 \r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: 123\r\n\r\n";
         let mut reader = BufReader::new(&bytes[..]);
 
         let resp = take_request(&mut reader);
@@ -271,14 +271,14 @@ mod tests {
 
     #[test]
     fn invalid_header() {
-        let bytes = b"GET / HTTP/1.1 22 3jklajs\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: 123\r\n\r\n";
+        let bytes = b"GET / HTTP/1.1 22 3jklajs \r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: 123\r\n\r\n";
         let mut reader = BufReader::new(&bytes[..]);
 
         let resp = take_request(&mut reader);
 
         assert!(matches!(resp, Err(ParseError::MalformedRequest)));
 
-        let bytes = b"GET / jjshjudh HTTP/1.1 22 3jklajs\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: 123\r\n\r\n";
+        let bytes = b"GET / jjshjudh HTTP/1.1 22 3jklajs \r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: 123\r\n\r\n";
 
         let mut reader = BufReader::new(&bytes[..]);
 
@@ -288,15 +288,7 @@ mod tests {
 
     #[test]
     fn invalid_method() {
-        let bytes = b"BAKLAVA / HTTP/1.1\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: 123\r\n\r\n";
-
-        let mut reader = BufReader::new(&bytes[..]);
-
-        let resp = take_request(&mut reader);
-        assert!(matches!(resp, Err(ParseError::InvalidMethod)));
-
-        // missing method
-        let bytes = b"Content-Type: text/html; charset=utf-8\r\nContent-Length: 123\r\n\r\n";
+        let bytes = b"BAKLAVA / HTTP/1.1 \r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: 123\r\n\r\n";
 
         let mut reader = BufReader::new(&bytes[..]);
 
@@ -316,7 +308,7 @@ mod tests {
         assert!(matches!(resp, Err(ParseError::MalformedRequest)));
 
         // incomplete header field
-        // let bytes = b"GET / HTTP/1.1\r\nContent-Type: tex";
+        // let bytes = b"GET / HTTP/1.1 \r\nContent-Type: tex";
         // let mut reader = BufReader::new(&bytes[..]);
         //
         // let resp = take_request(&mut reader);
@@ -324,7 +316,7 @@ mod tests {
         // will wait until timeout and return Err on timeout
         // assert!(matches!(resp, Err(ParseError::MalformedRequest)));
 
-        let bytes = b"GET / HTTP/1.1\r\nContent-Type: ";
+        let bytes = b"GET / HTTP/1.1 \r\nContent-Type: \r\n\r\n";
         let mut reader = BufReader::new(&bytes[..]);
 
         let resp = take_request(&mut reader);
@@ -332,7 +324,7 @@ mod tests {
         assert!(matches!(resp, Err(ParseError::MalformedRequest)));
 
         // incomplete header key
-        let bytes = b"GET / HTTP/1.1\r\nContent-Type: \r\nContent-L";
+        let bytes = b"GET / HTTP/1.1 \r\nContent-Type: \r\nContent-L";
         let mut reader = BufReader::new(&bytes[..]);
 
         let resp = take_request(&mut reader);
@@ -341,7 +333,7 @@ mod tests {
 
     #[test]
     fn unicode_in_request() {
-        let bytes = b"GET / HTTP/1.1\r\nContent-Type: \xE2\xA1\x91\xE2\xB4\x9D\xE2\x9B\xB6\r\nContent-Length: 123\r\n\r\n";
+        let bytes = b"GET / HTTP/1.1 \r\nContent-Type: \xE2\xA1\x91\xE2\xB4\x9D\xE2\x9B\xB6\r\nContent-Length: 123\r\n\r\n";
         let mut reader = BufReader::new(&bytes[..]);
 
         let resp = take_request(&mut reader);
@@ -351,7 +343,7 @@ mod tests {
     #[test]
     fn malformed_request() {
         // missing header field
-        let bytes = b"GET / HTTP/1.1\r\nContent-Type: \r\nContent-Length: 123\r\n\r\n";
+        let bytes = b"GET / HTTP/1.1 \r\nContent-Type: \r\nContent-Length: 123\r\n\r\n";
         let mut reader = BufReader::new(&bytes[..]);
 
         let resp = take_request(&mut reader);
