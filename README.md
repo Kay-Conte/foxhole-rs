@@ -15,11 +15,10 @@
   </p>
 </div>
  
-Vegemite is Simple, Fast, and Aimed at allowing you finish your projects.
+Vegemite is a simple, fast, synchronous framework built for finishing your projects.
  
 # Features
-- Blazing fast performance, greater than [Axum](https://github.com/tokio-rs/axum) and [Actix](https://github.com/actix/actix-web) (~600k req/sec on a ryzen 7 5700x with `wrk`)
-
+- Blazing fast performance (~600k req/sec on a ryzen 7 5700x with `wrk`)
 - Built-in threading system that allows you to efficiently handle requests.
 - Absolutely no async elements, improving ergonomics.
 - Minimal build size, 500kb when stripped.
@@ -28,12 +27,6 @@ Vegemite is Simple, Fast, and Aimed at allowing you finish your projects.
 - Unique routing system
  
 # Getting Started
-Add this to your cargo.toml
-```toml
-[dependencies]
-vegemite = "0.1.0"
-```
- 
 Vegemite uses a set of handler systems and routing modules to handle requests and responses.   
 Here's a starting example of a Hello World server.
 ```rust
@@ -78,7 +71,7 @@ Any type that implements the trait `Resolve<Output = ResolveGuard<Self>>` is via
 `vegemite` will try to provide the most common guards and getters you will use but few are implemented currenty.
 
 ### Example
-```rs
+```rust
 pub struct Get;
 
 impl Resolve for Get {
@@ -101,7 +94,7 @@ Additionally note the existence of `IntoResponse` which auto impls `MaybeIntoRes
 If a type returns `None` out of `MaybeIntoResponse` a response will not be sent and routing will continue to further nodes.
 
 ### Example
-```rs
+```rust
 impl IntoResponse for u16 {
     fn response(self) -> RawResponse {
         Response::builder()
