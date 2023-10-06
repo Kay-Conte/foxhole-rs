@@ -97,12 +97,6 @@ where
 
     let version = parts.next().ok_or(ParseError::MalformedRequest)?;
 
-    let empty = parts.next().ok_or(ParseError::MalformedRequest)?;
-
-    if !empty.is_empty() {
-        return Err(ParseError::MalformedRequest);
-    }
-
     let mut req = Request::builder()
         .method(method)
         .uri(uri)

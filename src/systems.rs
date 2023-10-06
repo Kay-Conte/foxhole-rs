@@ -200,7 +200,7 @@ impl Resolve for UrlCollect {
     fn resolve(ctx: &mut RequestState) -> ResolveGuard<Self> {
         let mut collect = Vec::new();
 
-        while let Some(part) = ctx.path_iter.next() {
+        for part in ctx.path_iter.by_ref().map(|i| i.to_string()) {
             collect.push(part.to_string())
         }
 

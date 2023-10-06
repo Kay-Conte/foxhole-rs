@@ -1,6 +1,6 @@
 use std::{
     collections::VecDeque,
-    io::BufReader,
+    io::{BufReader, Read},
     iter::Peekable,
     net::TcpStream,
     str::Split,
@@ -15,6 +15,7 @@ use http::Request;
 
 use crate::{
     http_utils::{take_request, IntoRawBytes},
+    lazy::Lazy,
     routing::Route,
     sequential_writer::{self, SequentialWriter},
     type_cache::{TypeCache, TypeCacheShared},
@@ -23,6 +24,8 @@ use crate::{
 
 const MIN_THREADS: usize = 4;
 const TIMEOUT: u64 = 5;
+
+type RawData = Vec<u8>;
 
 pub trait Task {
     fn run(self: Box<Self>);
@@ -53,22 +56,37 @@ impl Task for ConnectionTask {
 
         let mut reader = BufReader::new(self.stream);
 
-        loop {
-            match take_request(&mut reader) {
-                Ok(req) => {
-                    self.task_pool.send_task(RequestTask {
-                        cache: self.cache.clone(),
-                        request: req,
-                        writer: writer.0,
-                        router: self.router.clone(),
-                    });
+        while let Ok(req) = take_request(&mut reader) {
+            println!("Request");
 
-                    writer = SequentialWriter::new(sequential_writer::State::Waiting(writer.1));
-                }
-                Err(_) => {
-                    return;
-                }
-            }
+            let (lazy, sender) = Lazy::new();
+
+            let body_len = req
+                .headers()
+                .get("content-length")
+                .and_then(|v| v.to_str().ok())
+                .and_then(|s| s.parse::<usize>().ok())
+                .unwrap_or(0);
+
+            self.task_pool.send_task(RequestTask {
+                cache: self.cache.clone(),
+                request: req.map(|_| lazy),
+                writer: writer.0,
+                router: self.router.clone(),
+            });
+
+            let mut buf = vec![0; body_len];
+
+            if reader.read_exact(&mut buf).is_err() {
+                // Avoid blocking request tasks awaiting a body
+                sender.send(vec![]).unwrap();
+
+                return;
+            };
+
+            sender.send(buf).unwrap();
+
+            writer = SequentialWriter::new(sequential_writer::State::Waiting(writer.1));
         }
     }
 }
@@ -76,7 +94,7 @@ impl Task for ConnectionTask {
 pub struct RequestTask {
     pub cache: TypeCacheShared,
 
-    pub request: Request<()>,
+    pub request: Request<Lazy<RawData>>,
 
     pub writer: SequentialWriter<TcpStream>,
 
@@ -104,7 +122,7 @@ impl Task for RequestTask {
         loop {
             for system in cursor.systems() {
                 if let Some(r) = system.call(&mut ctx) {
-                    let _ = self.writer.send(&r.into_raw_bytes());
+                    self.writer.send(&r.into_raw_bytes()).unwrap();
 
                     return;
                 }
@@ -130,7 +148,7 @@ impl Task for RequestTask {
 pub struct RequestState<'a> {
     pub global_cache: TypeCacheShared,
     pub local_cache: TypeCache,
-    pub request: Request<()>,
+    pub request: Request<Lazy<RawData>>,
     pub path_iter: Peekable<Split<'a, &'static str>>,
 }
 

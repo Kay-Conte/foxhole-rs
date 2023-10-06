@@ -8,6 +8,7 @@ pub mod systems;
 pub mod type_cache;
 
 mod sequential_writer;
+mod lazy;
 mod tasks;
 
 pub use framework::run;
