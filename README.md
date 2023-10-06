@@ -18,7 +18,8 @@
 Vegemite is Simple, Fast, and Aimed at allowing you finish your projects.
  
 # Features
-- Blazing fast performance, greater than [Axum](https://github.com/tokio-rs/axum) and [Actix](https://github.com/actix/actix-web) for non keep-alive requests. [#5](/../../issues/5)
+- Blazing fast performance, greater than [Axum](https://github.com/tokio-rs/axum) and [Actix](https://github.com/actix/actix-web) (~600k req/sec on a ryzen 7 5700x with `wrk`)
+
 - Built-in threading system that allows you to efficiently handle requests.
 - Absolutely no async elements, improving ergonomics.
 - Minimal build size, 500kb when stripped.
