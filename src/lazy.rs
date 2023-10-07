@@ -1,16 +1,18 @@
-use std::sync::mpsc::{Receiver, channel, Sender};
+use std::{sync::mpsc::{Receiver, channel, Sender}, cell::RefCell};
 
-pub enum Lazy<T> {
+pub enum State<T> {
     Receiver(Receiver<T>),
     Value(T)
 }
+
+pub struct Lazy<T>(RefCell<State<T>>);
 
 impl<T> Lazy<T> {
     /// Constructs a new instance of `Lazy` and returns it's corresponding `Sender`
     pub fn new() -> (Self, Sender<T>) {
         let (sender, receiver) = channel();
 
-        (Lazy::Receiver(receiver), sender)
+        (Lazy(RefCell::new(State::Receiver(receiver))), sender)
     }
 
     /// This call blocks until the body has been read from the `TcpStream`
@@ -18,19 +20,21 @@ impl<T> Lazy<T> {
     /// # Panics
     ///
     /// This call will panic if its corresponding `Sender` hangs up before sending a value
-    pub fn get(&mut self) -> &T {
-        use Lazy::*;
+    pub fn get(&self) -> &T {
+        use State::*;
 
-        match self {
+        todo!();
+
+        match *self.0.borrow() {
             Receiver(r) => {
                 let body = r.recv().unwrap();
                 
-                *self = Value(body);
+                self.0.replace(Value(body));
 
                 self.get()
             }
 
-            Value(b) => b
+            Value(ref b) => b
         }
     }
 }

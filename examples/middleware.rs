@@ -1,6 +1,6 @@
 use vegemite::{
     framework::run, routing::Route, sys, systems::Html, Get, MaybeIntoResponse, Resolve,
-    ResolveGuard,
+    ResolveGuard, PathIter,
 };
 
 struct Auth {
@@ -8,8 +8,10 @@ struct Auth {
     token: String,
 }
 
-impl Resolve for Auth {
-    fn resolve(ctx: &mut vegemite::RequestState) -> ResolveGuard<Self> {
+impl<'a> Resolve<'a> for Auth {
+    type Output = Self;
+
+    fn resolve(ctx: &'a vegemite::RequestState, path_iter: &mut PathIter) -> ResolveGuard<Self> {
         match ctx.request.headers().get("Authorization") {
             Some(v) => ResolveGuard::Value(Auth {
                 token: v.to_str().unwrap().to_string(),

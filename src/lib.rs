@@ -11,6 +11,8 @@ mod sequential_writer;
 mod lazy;
 mod tasks;
 
+pub use tasks::PathIter;
+
 pub use framework::run;
 pub use routing::Route;
 pub use systems::{Get, IntoResponse, MaybeIntoResponse, Post, Resolve, ResolveGuard};
