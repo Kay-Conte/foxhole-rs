@@ -1,14 +1,16 @@
 use vegemite::{RequestState, Resolve, ResolveGuard, Route, sys, run, PathIter, Post};
 
-use std::cell::Ref;
+use std::str;
 
-struct Body<'a>(Ref<'a, Vec<u8>>);
+struct Body<'a>(&'a str);
 
 impl<'a, 'b> Resolve<'b> for Body<'a> {
     type Output = Body<'b>;
 
     fn resolve(ctx: &'b RequestState, _path_iter: &mut PathIter) -> ResolveGuard<Self::Output> {
-        ResolveGuard::Value(Body(ctx.request.body().get()))
+        let body = str::from_utf8(ctx.request.body().get().as_slice()).unwrap();
+
+        ResolveGuard::Value(Body(body))
     }
 }
 
