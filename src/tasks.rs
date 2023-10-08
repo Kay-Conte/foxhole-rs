@@ -59,8 +59,6 @@ impl Task for ConnectionTask {
         let mut reader = BufReader::new(self.stream);
 
         while let Ok(req) = take_request(&mut reader) {
-            println!("Request");
-
             let (lazy, sender) = Lazy::new();
 
             let body_len = req
