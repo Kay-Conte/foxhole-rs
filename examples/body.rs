@@ -15,6 +15,8 @@ impl<'a, 'b> Resolve<'b> for Body<'a> {
 }
 
 fn post(_post: Post, body: Body) -> u16{
+    println!("Body: {}", body.0);
+
     200
 }
 

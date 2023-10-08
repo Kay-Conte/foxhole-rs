@@ -23,10 +23,6 @@ impl<T> Lazy<T> {
     }
 
     /// This call blocks until the body has been read from the `TcpStream`
-    ///
-    /// # Panics
-    ///
-    /// This call will panic if its corresponding `Sender` hangs up before sending a value
     pub fn get<'a>(&'a self) -> &T {
         self.value.get_or_init(|| {
             self.receiver.recv().unwrap()

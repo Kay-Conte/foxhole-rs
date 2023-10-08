@@ -134,7 +134,7 @@ pub struct Get;
 impl<'a> Resolve<'a> for Get {
     type Output = Self;
 
-    fn resolve(ctx: &'a RequestState, path_iter: &mut PathIter) -> ResolveGuard<Self>
+    fn resolve(ctx: &'a RequestState, _path_iter: &mut PathIter) -> ResolveGuard<Self>
     {
         if ctx.request.method() == Method::GET {
             ResolveGuard::Value(Get)
@@ -151,7 +151,7 @@ pub struct Post;
 impl<'a> Resolve<'a> for Post {
     type Output = Self;
 
-    fn resolve(ctx: &'a RequestState, path_iter: &mut PathIter) -> ResolveGuard<Self> {
+    fn resolve(ctx: &'a RequestState, _path_iter: &mut PathIter) -> ResolveGuard<Self> {
         if ctx.request.method() == Method::POST {
             ResolveGuard::Value(Post)
         } else {
@@ -172,7 +172,7 @@ where
 {
     type Output = Self;
 
-    fn resolve(ctx: &'a RequestState, path_iter: &mut PathIter) -> ResolveGuard<Self> {
+    fn resolve(ctx: &'a RequestState, _path_iter: &mut PathIter) -> ResolveGuard<Self> {
         ctx.global_cache
             .read()
             .unwrap()
@@ -190,7 +190,7 @@ pub struct Endpoint;
 impl<'a> Resolve<'a> for Endpoint {
     type Output = Self;
 
-    fn resolve(ctx: &RequestState, path_iter: &mut PathIter) -> ResolveGuard<Self> {
+    fn resolve(_ctx: &RequestState, path_iter: &mut PathIter) -> ResolveGuard<Self> {
         match path_iter.peek() {
             Some(v) if !v.is_empty() => ResolveGuard::None,
             _ => ResolveGuard::Value(Endpoint),
@@ -206,7 +206,7 @@ pub struct UrlPart(pub String);
 impl<'a> Resolve<'a> for UrlPart {
     type Output = Self;
 
-    fn resolve(ctx: &'a RequestState, path_iter: &mut PathIter) -> ResolveGuard<Self> {
+    fn resolve(_ctx: &'a RequestState, path_iter: &mut PathIter) -> ResolveGuard<Self> {
         path_iter.next().map(|i| UrlPart(i.to_string())).into()
     }
 }
@@ -219,7 +219,7 @@ pub struct UrlCollect(pub Vec<String>);
 impl<'a> Resolve<'a> for UrlCollect {
     type Output = Self;
 
-    fn resolve(ctx: &'a RequestState, path_iter: &mut PathIter) -> ResolveGuard<Self> {
+    fn resolve(_ctx: &'a RequestState, path_iter: &mut PathIter) -> ResolveGuard<Self> {
         let mut collect = Vec::new();
 
         for part in path_iter.by_ref().map(|i| i.to_string()) {

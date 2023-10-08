@@ -112,7 +112,7 @@ impl Task for RequestTask {
 
         path_iter.next();
 
-        let mut ctx = RequestState {
+        let ctx = RequestState {
             global_cache: self.cache.clone(),
             request: self.request,
         };
