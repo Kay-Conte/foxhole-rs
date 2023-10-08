@@ -11,7 +11,7 @@ struct Auth {
 impl<'a> Resolve<'a> for Auth {
     type Output = Self;
 
-    fn resolve(ctx: &'a vegemite::RequestState, path_iter: &mut PathIter) -> ResolveGuard<Self> {
+    fn resolve(ctx: &'a vegemite::RequestState, _path_iter: &mut PathIter) -> ResolveGuard<Self> {
         match ctx.request.headers().get("Authorization") {
             Some(v) => ResolveGuard::Value(Auth {
                 token: v.to_str().unwrap().to_string(),

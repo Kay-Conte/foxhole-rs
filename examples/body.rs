@@ -1,20 +1,18 @@
-use vegemite::{RequestState, Resolve, ResolveGuard, Route, sys, run, PathIter};
+use vegemite::{RequestState, Resolve, ResolveGuard, Route, sys, run, PathIter, Post};
 
-use std::str;
+use std::cell::Ref;
 
-struct Body<'a>(&'a str);
+struct Body<'a>(Ref<'a, Vec<u8>>);
 
 impl<'a, 'b> Resolve<'b> for Body<'a> {
     type Output = Body<'b>;
 
     fn resolve(ctx: &'b RequestState, _path_iter: &mut PathIter) -> ResolveGuard<Self::Output> {
-        ResolveGuard::Value(Body(str::from_utf8(ctx.request.body().get()).unwrap()))
+        ResolveGuard::Value(Body(ctx.request.body().get()))
     }
 }
 
-fn post(body: Body) -> u16{
-    println!("Received body {}", body.0);
-
+fn post(_post: Post, body: Body) -> u16{
     200
 }
 
