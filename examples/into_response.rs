@@ -36,5 +36,5 @@ fn main() {
 
     println!("Try connecting from a browser at 'http://localhost:8080/page'");
 
-    run("127.0.0.1:5000", router);
+    run("127.0.0.1:8080", router);
 }
