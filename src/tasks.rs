@@ -18,12 +18,14 @@ use crate::{
     lazy::Lazy,
     routing::Route,
     sequential_writer::{self, SequentialWriter},
-    type_cache::{TypeCache, TypeCacheShared},
+    type_cache::TypeCacheShared,
     MaybeIntoResponse,
 };
 
 const MIN_THREADS: usize = 4;
 const TIMEOUT: u64 = 5;
+
+pub type PathIter<'a> = Peekable<Split<'a, &'static str>>;
 
 type RawData = Vec<u8>;
 
@@ -113,25 +115,23 @@ impl Task for RequestTask {
 
         path_iter.next();
 
-        let mut ctx = RequestState {
+        let ctx = RequestState {
             global_cache: self.cache.clone(),
-            local_cache: TypeCache::new(),
             request: self.request,
-            path_iter,
         };
 
         let mut cursor = self.router.as_ref();
 
         loop {
             for system in cursor.systems() {
-                if let Some(r) = system.call(&mut ctx) {
+                if let Some(r) = system.call(&ctx, &mut path_iter) {
                     self.writer.send(&r.into_raw_bytes()).unwrap();
 
                     return;
                 }
             }
 
-            let Some(next) = ctx.path_iter.next() else {
+            let Some(next) = path_iter.next() else {
                 break;
             };
 
@@ -148,11 +148,9 @@ impl Task for RequestTask {
     }
 }
 
-pub struct RequestState<'a> {
+pub struct RequestState {
     pub global_cache: TypeCacheShared,
-    pub local_cache: TypeCache,
     pub request: Request<Lazy<RawData>>,
-    pub path_iter: Peekable<Split<'a, &'static str>>,
 }
 
 struct Shared {

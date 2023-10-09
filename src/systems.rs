@@ -1,9 +1,8 @@
 use http::{Method, Response, Version};
 
-use crate::{http_utils::IntoRawBytes, tasks::RequestState, type_cache::TypeCacheKey};
+use crate::{http_utils::IntoRawBytes, tasks::{RequestState, PathIter}, type_cache::TypeCacheKey};
 
 pub type RawResponse = Response<Vec<u8>>;
-
 
 pub trait IntoResponse {
     fn response(self) -> RawResponse;
@@ -92,8 +91,10 @@ impl IntoResponse for Html {
 
 /// `Resolve` is a trait used to construct values needed to call a given `System`. All parameters
 /// of a `System` must implement `Resolve` to be valid.
-pub trait Resolve: Sized {
-    fn resolve(ctx: &mut RequestState) -> ResolveGuard<Self>;
+pub trait Resolve<'a>: Sized {
+    type Output: 'a;
+
+    fn resolve(ctx: &'a RequestState, path_iter: &mut PathIter) -> ResolveGuard<Self::Output>;
 }
 
 /// `ResolveGuard` is the expected return type of top level `Resolve`able objects. Only types that
@@ -130,8 +131,11 @@ impl<T> ResolveGuard<T> {
 /// to run.
 pub struct Get;
 
-impl Resolve for Get {
-    fn resolve(ctx: &mut RequestState) -> ResolveGuard<Self> {
+impl<'a> Resolve<'a> for Get {
+    type Output = Self;
+
+    fn resolve(ctx: &'a RequestState, _path_iter: &mut PathIter) -> ResolveGuard<Self>
+    {
         if ctx.request.method() == Method::GET {
             ResolveGuard::Value(Get)
         } else {
@@ -144,8 +148,10 @@ impl Resolve for Get {
 /// to run.
 pub struct Post;
 
-impl Resolve for Post {
-    fn resolve(ctx: &mut RequestState) -> ResolveGuard<Self> {
+impl<'a> Resolve<'a> for Post {
+    type Output = Self;
+
+    fn resolve(ctx: &'a RequestState, _path_iter: &mut PathIter) -> ResolveGuard<Self> {
         if ctx.request.method() == Method::POST {
             ResolveGuard::Value(Post)
         } else {
@@ -159,12 +165,14 @@ pub struct Query<K>(pub K::Value)
 where
     K: TypeCacheKey;
 
-impl<K> Resolve for Query<K>
+impl<'a, K> Resolve<'a> for Query<K>
 where
     K: TypeCacheKey,
     K::Value: Clone,
 {
-    fn resolve(ctx: &mut RequestState) -> ResolveGuard<Self> {
+    type Output = Self;
+
+    fn resolve(ctx: &'a RequestState, _path_iter: &mut PathIter) -> ResolveGuard<Self> {
         ctx.global_cache
             .read()
             .unwrap()
@@ -179,9 +187,11 @@ where
 /// uri.
 pub struct Endpoint;
 
-impl Resolve for Endpoint {
-    fn resolve(ctx: &mut RequestState) -> ResolveGuard<Self> {
-        match ctx.path_iter.peek() {
+impl<'a> Resolve<'a> for Endpoint {
+    type Output = Self;
+
+    fn resolve(_ctx: &RequestState, path_iter: &mut PathIter) -> ResolveGuard<Self> {
+        match path_iter.peek() {
             Some(v) if !v.is_empty() => ResolveGuard::None,
             _ => ResolveGuard::Value(Endpoint),
         }
@@ -193,9 +203,11 @@ impl Resolve for Endpoint {
 /// method.
 pub struct UrlPart(pub String);
 
-impl Resolve for UrlPart {
-    fn resolve(ctx: &mut RequestState) -> ResolveGuard<Self> {
-        ctx.path_iter.next().map(|i| UrlPart(i.to_string())).into()
+impl<'a> Resolve<'a> for UrlPart {
+    type Output = Self;
+
+    fn resolve(_ctx: &'a RequestState, path_iter: &mut PathIter) -> ResolveGuard<Self> {
+        path_iter.next().map(|i| UrlPart(i.to_string())).into()
     }
 }
 
@@ -204,11 +216,13 @@ impl Resolve for UrlPart {
 /// method.
 pub struct UrlCollect(pub Vec<String>);
 
-impl Resolve for UrlCollect {
-    fn resolve(ctx: &mut RequestState) -> ResolveGuard<Self> {
+impl<'a> Resolve<'a> for UrlCollect {
+    type Output = Self;
+
+    fn resolve(_ctx: &'a RequestState, path_iter: &mut PathIter) -> ResolveGuard<Self> {
         let mut collect = Vec::new();
 
-        for part in ctx.path_iter.by_ref().map(|i| i.to_string()) {
+        for part in path_iter.by_ref().map(|i| i.to_string()) {
             collect.push(part.to_string())
         }
 
@@ -217,45 +231,43 @@ impl Resolve for UrlCollect {
 }
 
 #[doc(hidden)]
-pub trait System<T> {
-    fn run(self, ctx: &mut RequestState) -> Option<RawResponse>;
+pub trait System<'a, T> {
+    fn run(self, ctx: &'a RequestState, path_iter: &mut PathIter) -> Option<RawResponse>;
 }
 
 #[doc(hidden)]
 pub struct DynSystem {
-    inner: Box<dyn Fn(&mut RequestState) -> Option<RawResponse> + 'static + Send + Sync>,
+    inner: Box<dyn Fn(&RequestState, &mut PathIter) -> Option<RawResponse> + 'static + Send + Sync>,
 }
 
 impl DynSystem {
-    pub fn new<T, A>(system: T) -> Self
-    where
-        T: System<A> + 'static + Copy + Send + Sync,
+    pub fn new<A>(system: impl for<'a> System<'a, A> + 'static + Send + Sync + Copy) -> Self
     {
         DynSystem {
-            inner: Box::new(move |ctx| system.run(ctx)),
+            inner: Box::new(move |ctx, path_iter| system.run(ctx, path_iter)),
         }
     }
 
-    pub fn call(&self, ctx: &mut RequestState) -> Option<RawResponse> {
-        (self.inner)(ctx)
+    pub fn call(&self, ctx: &RequestState, path_iter: &mut PathIter) -> Option<RawResponse> {
+        (self.inner)(ctx, path_iter)
     }
 }
 
 macro_rules! system {
     ($($x:ident),* $(,)?) => {
-        impl<RESPONSE, $($x,)* BASE> System<(RESPONSE, $($x,)*)> for BASE
+        impl<'a, RESPONSE, $($x,)* BASE> System<'a, (RESPONSE, $($x,)*)> for BASE
         where
-            BASE: Fn($($x,)*) -> RESPONSE,
-            $($x: Resolve,)*
+            BASE: Fn($($x,)*) -> RESPONSE + Fn($($x::Output,)*) -> RESPONSE,
+            $($x: Resolve<'a>,)*
             RESPONSE: MaybeIntoResponse,
         {
             #[allow(unused)]
-            fn run(self, ctx: &mut RequestState) -> Option<RawResponse> {
+            fn run(self, ctx: &'a RequestState, path_iter: &mut PathIter) -> Option<RawResponse> {
 
 
                 $(
                 #[allow(non_snake_case)]
-                let $x = match $x::resolve(ctx) {
+                let $x = match $x::resolve(ctx, path_iter) {
                     ResolveGuard::Value(v) => v,
                     ResolveGuard::None => return None,
                     ResolveGuard::Respond(r) => return Some(r), };)*

@@ -1,8 +1,11 @@
-use std::sync::mpsc::{Receiver, channel, Sender};
+use std::{
+    cell::OnceCell,
+    sync::mpsc::{channel, Receiver, Sender},
+};
 
-pub enum Lazy<T> {
-    Receiver(Receiver<T>),
-    Value(T)
+pub struct Lazy<T> {
+    receiver: Receiver<T>,
+    value: OnceCell<T>,
 }
 
 impl<T> Lazy<T> {
@@ -10,27 +13,19 @@ impl<T> Lazy<T> {
     pub fn new() -> (Self, Sender<T>) {
         let (sender, receiver) = channel();
 
-        (Lazy::Receiver(receiver), sender)
+        (
+            Lazy {
+                receiver,
+                value: OnceCell::new(),
+            },
+            sender,
+        )
     }
 
     /// This call blocks until the body has been read from the `TcpStream`
-    ///
-    /// # Panics
-    ///
-    /// This call will panic if its corresponding `Sender` hangs up before sending a value
-    pub fn get(&mut self) -> &T {
-        use Lazy::*;
-
-        match self {
-            Receiver(r) => {
-                let body = r.recv().unwrap();
-                
-                *self = Value(body);
-
-                self.get()
-            }
-
-            Value(b) => b
-        }
+    pub fn get<'a>(&'a self) -> &T {
+        self.value.get_or_init(|| {
+            self.receiver.recv().unwrap()
+        })
     }
 }
