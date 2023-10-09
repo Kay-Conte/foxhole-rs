@@ -43,8 +43,8 @@ fn get(_get: Get) -> Response<String> {
  
 fn main() {
     let router = Route::new(sys![get]);
- 
-    run("127.0.0.1:8080", router);
+
+    // run("127.0.0.1:8080", router);
 } 
 ```
 
@@ -66,16 +66,20 @@ Function parameters can act as both getters and guards in `vegemite`.
 
 In the example above, `Get` acts as a guard to make sure the system is only run on `GET` requests. 
 
-Any type that implements the trait `Resolve<Output = ResolveGuard<Self>>` is viable to use as a parameter. 
+Any type that implements the trait `Resolve` is viable to use as a parameter. 
 
 `vegemite` will try to provide the most common guards and getters you will use but few are implemented currenty.
 
 ### Example
 ```rust
+use vegemite::{http::Method, PathIter, RequestState, Resolve, ResolveGuard};
+
 pub struct Get;
 
-impl Resolve for Get {
-    fn resolve(ctx: &mut Context) -> ResolveGuard<Self> {
+impl<'a> Resolve<'a> for Get {
+    type Output = Self;
+
+    fn resolve(ctx: &'a RequestState, _path_iter: &mut PathIter) -> ResolveGuard<Self::Output> {
         if ctx.request.method() == Method::GET {
             ResolveGuard::Value(Get)
         } else {
@@ -95,15 +99,21 @@ If a type returns `None` out of `MaybeIntoResponse` a response will not be sent 
 
 ### Example
 ```rust
-impl IntoResponse for u16 {
-    fn response(self) -> RawResponse {
+use vegemite::{http::Version, IntoResponse, Response};
+
+pub struct Html(pub String);
+
+impl IntoResponse for Html {
+    fn response(self) -> Response<Vec<u8>> {
+        let bytes = self.0.into_bytes();
+
         Response::builder()
-            .version(Version::HTTP_10)
-            .status(self)
-            .header("Content-Type", "text/plain; charset=UTF-8")
-            .header("Content-Length", "0")
-            .body(Vec::new())
-            .expect("Failed to build request")
+            .version(Version::HTTP_11)
+            .status(200)
+            .header("Content-Type", "text/html; charset=utf-8")
+            .header("Content-Length", format!("{}", bytes.len()))
+            .body(bytes)
+            .unwrap()
     }
 }
 ```
