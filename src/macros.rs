@@ -4,6 +4,6 @@ macro_rules! sys {
     () => { vec![] };
 
     ($($x:ident),*) => {
-        vec![$(vegemite::systems::DynSystem::new($x),)*]
+        vec![$(foxhole::systems::DynSystem::new($x),)*]
     };
 }

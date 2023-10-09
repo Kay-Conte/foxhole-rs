@@ -1,21 +1,21 @@
 <div align="center">
-  <h1>Vegemite</h1>
+  <h1>Foxhole</h1>
   <p>
     <strong>A Synchronous HTTP framework for Rust</strong>
   </p>
   <p>
 
 ![Minimum Supported Rust Version](https://img.shields.io/badge/rustc-1.65+-ab6000.svg)
-[![Crates.io](https://img.shields.io/crates/v/vegemite.svg)](https://crates.io/crates/vegemite)
-[![Docs.rs](https://docs.rs/vegemite/badge.svg)](https://docs.rs/vegemite)
-![Code Size](https://img.shields.io/github/languages/code-size/Kay-Conte/vegemite-rs)
+[![Crates.io](https://img.shields.io/crates/v/foxhole.svg)](https://crates.io/crates/foxhole)
+[![Docs.rs](https://docs.rs/foxhole/badge.svg)](https://docs.rs/foxhole)
+![Code Size](https://img.shields.io/github/languages/code-size/Kay-Conte/foxhole-rs)
 ![Maintained](https://img.shields.io/maintenance/yes/2023?style=flat-square)
-[![License](https://img.shields.io/crates/l/vegemite.svg)](https://opensource.org/licenses/MIT)
+[![License](https://img.shields.io/crates/l/foxhole.svg)](https://opensource.org/licenses/MIT)
 
   </p>
 </div>
  
-Vegemite is a simple, fast, synchronous framework built for finishing your projects.
+Foxhole is a simple, fast, synchronous framework built for finishing your projects.
  
 # Features
 - Blazing fast performance (~600k req/sec on a ryzen 7 5700x with `wrk`)
@@ -27,10 +27,10 @@ Vegemite is a simple, fast, synchronous framework built for finishing your proje
 - Unique routing system
  
 # Getting Started
-Vegemite uses a set of handler systems and routing modules to handle requests and responses.   
+Foxhole uses a set of handler systems and routing modules to handle requests and responses.   
 Here's a starting example of a Hello World server.
 ```rust
-use vegemite::{run, sys, Get, Route, Response};
+use foxhol::{run, sys, Get, Route, Response};
  
 fn get(_get: Get) -> Response<String> {
     let content = String::from("<h1>Hello World</h1>");
@@ -62,17 +62,17 @@ If no responses are returned the server will automatically return `404`. This wi
 
 ## Parameters/Guards
 
-Function parameters can act as both getters and guards in `vegemite`. 
+Function parameters can act as both getters and guards in `foxhole`. 
 
 In the example above, `Get` acts as a guard to make sure the system is only run on `GET` requests. 
 
 Any type that implements the trait `Resolve` is viable to use as a parameter. 
 
-`vegemite` will try to provide the most common guards and getters you will use but few are implemented currenty.
+`foxhole` will try to provide the most common guards and getters you will use but few are implemented currenty.
 
 ### Example
 ```rust
-use vegemite::{http::Method, PathIter, RequestState, Resolve, ResolveGuard};
+use foxhole::{http::Method, PathIter, RequestState, Resolve, ResolveGuard};
 
 pub struct Get;
 
@@ -99,7 +99,8 @@ If a type returns `None` out of `MaybeIntoResponse` a response will not be sent 
 
 ### Example
 ```rust
-use vegemite::{http::Version, IntoResponse, Response};
+use foxhole::{http::Version, IntoResponse, Response};
+
 
 pub struct Html(pub String);
 

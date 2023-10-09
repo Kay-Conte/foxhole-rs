@@ -1,4 +1,4 @@
-use vegemite::{run, sys, systems::Endpoint, Get, IntoResponse, Response, Route};
+use foxhole::{run, sys, systems::Endpoint, Get, IntoResponse, Response, Route};
 
 // This is a reimplementation of the provided `Html` type.
 struct Html {

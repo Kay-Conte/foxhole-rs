@@ -1,4 +1,4 @@
-use vegemite::{run, sys, Get, Route};
+use foxhole::{run, sys, Get, Route};
 
 fn get(_get: Get) -> u16 {
     200

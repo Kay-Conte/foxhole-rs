@@ -1,4 +1,4 @@
-use vegemite::{
+use foxhole::{
     http_utils::IntoRawBytes,
     run, sys,
     systems::{Endpoint, UrlCollect, UrlPart},
@@ -8,7 +8,7 @@ use vegemite::{
 pub struct User(String);
 
 impl IntoResponse for User {
-    fn response(self) -> vegemite::systems::RawResponse {
+    fn response(self) -> foxhole::systems::RawResponse {
         let bytes = self.0.into_raw_bytes();
 
         Response::builder()

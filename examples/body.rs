@@ -1,4 +1,4 @@
-use vegemite::{RequestState, Resolve, ResolveGuard, Route, sys, run, PathIter, Post};
+use foxhole::{RequestState, Resolve, ResolveGuard, Route, sys, run, PathIter, Post};
 
 use std::str;
 

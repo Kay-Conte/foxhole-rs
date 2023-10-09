@@ -1,6 +1,6 @@
 use std::sync::{Arc, RwLock};
 
-use vegemite::{
+use foxhole::{
     framework::run_with_cache,
     sys,
     systems::{Endpoint, Html, Query},
