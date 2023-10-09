@@ -51,12 +51,11 @@ impl Task for ConnectionTask {
             .set_read_timeout(Some(Duration::from_secs(TIMEOUT)))
             .expect("Shouldn't fail unless duration is 0");
 
-        let Ok(writer) = self.stream.try_clone()  else {
+        let Ok(writer) = self.stream.try_clone() else {
             // Stream closed early
             return;
-        };        
+        };
 
-        // FIXME panics if stream closed early
         let mut writer = SequentialWriter::new(sequential_writer::State::Writer(writer));
 
         let mut reader = BufReader::new(self.stream);
@@ -156,6 +155,7 @@ pub struct RequestState {
 struct Shared {
     /// Pool of tasks that need to be run
     pool: Mutex<VecDeque<Box<dyn Task + Send + 'static>>>,
+
     /// Conditional var used to sleep and wake threads
     condvar: Condvar,
 
