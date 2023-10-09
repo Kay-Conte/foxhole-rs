@@ -1,7 +1,7 @@
-use foxhole::{run, sys, Get, Route};
+use foxhole::{systems::Html, run, sys, Get, Route};
 
-fn get(_get: Get) -> u16 {
-    200
+fn get(_get: Get) -> Html {
+    Html("<h1> Foxhole </h1>".to_string())
 }
 
 fn main() {
