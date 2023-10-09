@@ -30,7 +30,7 @@ Foxhole is a simple, fast, synchronous framework built for finishing your projec
 Foxhole uses a set of handler systems and routing modules to handle requests and responses.   
 Here's a starting example of a Hello World server.
 ```rust
-use foxhol::{run, sys, Get, Route, Response};
+use foxhole::{run, sys, Get, Route, Response};
  
 fn get(_get: Get) -> Response<String> {
     let content = String::from("<h1>Hello World</h1>");
