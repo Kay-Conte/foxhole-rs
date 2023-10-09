@@ -51,10 +51,13 @@ impl Task for ConnectionTask {
             .set_read_timeout(Some(Duration::from_secs(TIMEOUT)))
             .expect("Shouldn't fail unless duration is 0");
 
+        let Ok(writer) = self.stream.try_clone()  else {
+            // Stream closed early
+            return;
+        };        
+
         // FIXME panics if stream closed early
-        let mut writer = SequentialWriter::new(sequential_writer::State::Writer(
-            self.stream.try_clone().unwrap(),
-        ));
+        let mut writer = SequentialWriter::new(sequential_writer::State::Writer(writer));
 
         let mut reader = BufReader::new(self.stream);
 
@@ -78,13 +81,15 @@ impl Task for ConnectionTask {
             let mut buf = vec![0; body_len];
 
             if reader.read_exact(&mut buf).is_err() {
-                // Avoid blocking request tasks awaiting a body
-                sender.send(vec![]).unwrap();
+                // Avoid blocking request tasks awaiting a body that doesn't exist.
+                let _ = sender.send(vec![]);
 
                 return;
             };
 
-            sender.send(buf).unwrap();
+            // This will only error if the `Request` was already responded to before we finish
+            // reading the body.
+            let _ = sender.send(buf);
 
             writer = SequentialWriter::new(sequential_writer::State::Waiting(writer.1));
         }

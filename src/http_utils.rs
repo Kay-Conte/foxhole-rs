@@ -1,7 +1,7 @@
 //! This module provides http utility traits and functions for parsing and handling Requests and
 //! Responses
 
-use http::{Request, Response, StatusCode, Version};
+use http::{Request, Response, Version};
 
 use std::io::{BufRead, Write};
 
@@ -188,10 +188,6 @@ impl IntoRawBytes for String {
 }
 
 pub trait ResponseExt: Sized {
-    fn base(code: StatusCode) -> Response<()>;
-
-    fn empty(code: impl Into<StatusCode>) -> Response<()>;
-
     fn into_raw_response(self) -> RawResponse;
 }
 
@@ -199,14 +195,6 @@ impl<T> ResponseExt for Response<T>
 where
     T: IntoRawBytes,
 {
-    fn base(code: StatusCode) -> Response<()> {
-        Response::builder().status(code).body(()).unwrap()
-    }
-
-    fn empty(code: impl Into<StatusCode>) -> Response<()> {
-        Response::builder().status(code.into()).body(()).unwrap()
-    }
-
     fn into_raw_response(self) -> RawResponse {
         self.map(IntoRawBytes::into_raw_bytes)
     }
