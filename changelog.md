@@ -1,7 +1,10 @@
-# [unreleased]
+# [0.3.0]
 
 ### Added
-- Body reading example `body.rs
+- Body reading example `body.rs`
+
+### Removed
+- Cargo.lock is no longer synced
 
 ### Changes 
 - `Vegemite` is now `Foxhole`
