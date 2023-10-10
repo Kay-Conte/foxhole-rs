@@ -62,6 +62,8 @@ impl Task for ConnectionTask {
         while let Ok(req) = take_request(&mut reader) {
             let (lazy, sender) = Lazy::new();
 
+            let keep_alive = req.headers().get("Connection").and_then(|v| v.to_str().ok()).map(|s| s == "keep-alive").unwrap_or(false);
+
             let body_len = req
                 .headers()
                 .get("content-length")
@@ -90,6 +92,10 @@ impl Task for ConnectionTask {
             let _ = sender.send(buf);
 
             writer = SequentialWriter::new(sequential_writer::State::Waiting(writer.1));
+
+            if !keep_alive {
+                return;
+            }
         }
     }
 }
