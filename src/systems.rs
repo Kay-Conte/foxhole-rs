@@ -8,56 +8,12 @@ pub trait IntoResponse {
     fn response(self) -> RawResponse;
 }
 
-/// All `System`s must return a type implementing `MaybeIntoResponse`. This trait dictates the
-/// expected behaviour of the underlying router. If this method returns `None` the router will
-/// continue. If it receives `Some` value, it will respond to the connection and stop routing.
-pub trait MaybeIntoResponse {
-    fn maybe_response(self) -> Option<RawResponse>;
-}
-
-impl<T> MaybeIntoResponse for T
-where
-    T: IntoResponse,
-{
-    fn maybe_response(self) -> Option<RawResponse> {
-        Some(self.response())
-    }
-}
-
-impl<T> MaybeIntoResponse for Response<T>
+impl<T> IntoResponse for Response<T>
 where
     T: IntoRawBytes,
 {
-    fn maybe_response(self) -> Option<RawResponse> {
-        Some(self.map(IntoRawBytes::into_raw_bytes))
-    }
-}
-
-impl MaybeIntoResponse for () {
-    fn maybe_response(self) -> Option<RawResponse> {
-        None
-    }
-}
-
-impl<T> MaybeIntoResponse for Option<T>
-where
-    T: MaybeIntoResponse,
-{
-    fn maybe_response(self) -> Option<RawResponse> {
-        self.and_then(MaybeIntoResponse::maybe_response)
-    }
-}
-
-impl<T, E> MaybeIntoResponse for Result<T, E>
-where
-    T: MaybeIntoResponse,
-    E: MaybeIntoResponse,
-{
-    fn maybe_response(self) -> Option<RawResponse> {
-        match self {
-            Ok(v) => v.maybe_response(),
-            Err(e) => e.maybe_response(),
-        }
+    fn response(self) -> RawResponse {
+        self.map(|b| b.into_raw_bytes())
     }
 }
 
@@ -88,6 +44,66 @@ impl IntoResponse for Html {
             .unwrap()
     }
 }
+
+pub enum Action {
+    Response(RawResponse),
+    Upgrade(fn()),
+    None,
+}
+
+impl<T> From<Option<T>> for Action where T: IntoResponse {
+    fn from(value: Option<T>) -> Self {
+        match value {
+            Some(r) => Action::Response(r.response()),
+            None => Action::None,
+        }
+    }
+}
+
+/// All `System`s must return a type implementing `MaybeIntoResponse`. This trait dictates the
+/// expected behaviour of the underlying router. If this method returns `None` the router will
+/// continue. If it receives `Some` value, it will respond to the connection and stop routing.
+pub trait IntoAction {
+    fn into_action(self) -> Action;
+}
+
+impl<T> IntoAction for T
+where
+    T: IntoResponse,
+{
+    fn into_action(self) -> Action {
+        Action::Response(self.response())
+    }
+}
+impl IntoAction for () {
+    fn into_action(self) -> Action {
+        Action::None
+    }
+}
+
+impl<T> IntoAction for Option<T> 
+where
+    T: IntoResponse,
+{
+    fn into_action(self) -> Action {
+        self.into()
+    }
+}
+
+impl<T, E> IntoAction for Result<T, E>
+where
+    T: IntoAction,
+    E: IntoAction,
+{
+    fn into_action(self) -> Action {
+        match self {
+            Ok(v) => v.into_action(),
+            Err(e) => e.into_action(),
+        }
+    }
+}
+
+
 
 /// `Resolve` is a trait used to construct values needed to call a given `System`. All parameters
 /// of a `System` must implement `Resolve` to be valid.
@@ -232,12 +248,12 @@ impl<'a> Resolve<'a> for UrlCollect {
 
 #[doc(hidden)]
 pub trait System<'a, T> {
-    fn run(self, ctx: &'a RequestState, path_iter: &mut PathIter) -> Option<RawResponse>;
+    fn run(self, ctx: &'a RequestState, path_iter: &mut PathIter) -> Action;
 }
 
 #[doc(hidden)]
 pub struct DynSystem {
-    inner: Box<dyn Fn(&RequestState, &mut PathIter) -> Option<RawResponse> + 'static + Send + Sync>,
+    inner: Box<dyn Fn(&RequestState, &mut PathIter) -> Action + 'static + Send + Sync>,
 }
 
 impl DynSystem {
@@ -248,7 +264,7 @@ impl DynSystem {
         }
     }
 
-    pub fn call(&self, ctx: &RequestState, path_iter: &mut PathIter) -> Option<RawResponse> {
+    pub fn call(&self, ctx: &RequestState, path_iter: &mut PathIter) -> Action {
         (self.inner)(ctx, path_iter)
     }
 }
@@ -259,22 +275,22 @@ macro_rules! system {
         where
             BASE: Fn($($x,)*) -> RESPONSE + Fn($($x::Output,)*) -> RESPONSE,
             $($x: Resolve<'a>,)*
-            RESPONSE: MaybeIntoResponse,
+            RESPONSE: IntoAction,
         {
             #[allow(unused)]
-            fn run(self, ctx: &'a RequestState, path_iter: &mut PathIter) -> Option<RawResponse> {
+            fn run(self, ctx: &'a RequestState, path_iter: &mut PathIter) -> Action {
 
 
                 $(
                 #[allow(non_snake_case)]
                 let $x = match $x::resolve(ctx, path_iter) {
                     ResolveGuard::Value(v) => v,
-                    ResolveGuard::None => return None,
-                    ResolveGuard::Respond(r) => return Some(r), };)*
+                    ResolveGuard::None => return Action::None,
+                    ResolveGuard::Respond(r) => return Action::Response(r), };)*
 
                 let r = self($($x,)*);
 
-                r.maybe_response()
+                r.into_action()
             }
         }
     }

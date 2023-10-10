@@ -1,6 +1,6 @@
 use foxhole::{
-    framework::run, routing::Route, sys, systems::Html, Get, MaybeIntoResponse, Resolve,
-    ResolveGuard, PathIter,
+    framework::run, routing::Route, sys, systems::Html, Get, Resolve,
+    ResolveGuard, PathIter, IntoResponse,
 };
 
 struct Auth {
@@ -16,7 +16,7 @@ impl<'a> Resolve<'a> for Auth {
             Some(v) => ResolveGuard::Value(Auth {
                 token: v.to_str().unwrap().to_string(),
             }),
-            None => ResolveGuard::Respond(401u16.maybe_response().unwrap()),
+            None => ResolveGuard::Respond(401u16.response()),
         }
     }
 }

@@ -19,7 +19,7 @@ use crate::{
     routing::Route,
     sequential_writer::{self, SequentialWriter},
     type_cache::TypeCacheShared,
-    MaybeIntoResponse,
+    IntoResponse, systems::Action,
 };
 
 const MIN_THREADS: usize = 4;
@@ -123,10 +123,15 @@ impl Task for RequestTask {
 
         loop {
             for system in cursor.systems() {
-                if let Some(r) = system.call(&ctx, &mut path_iter) {
-                    self.writer.send(&r.into_raw_bytes()).unwrap();
 
-                    return;
+                match system.call(&ctx, &mut path_iter) {
+                    Action::Response(r) => {
+                        self.writer.send(&r.into_raw_bytes()).unwrap();
+
+                        return;
+                    }
+                    Action::Upgrade(f) => f(),
+                    Action::None => {}
                 }
             }
 
@@ -143,7 +148,7 @@ impl Task for RequestTask {
 
         let _ = self
             .writer
-            .send(&404u16.maybe_response().unwrap().into_raw_bytes());
+            .send(&404u16.response().into_raw_bytes());
     }
 }
 
