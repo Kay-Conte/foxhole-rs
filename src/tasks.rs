@@ -253,10 +253,13 @@ impl TaskPool {
     {
         self.shared.pool.lock().unwrap().push_back(Box::new(task));
 
+        
         if self.shared.waiting_tasks.load(Ordering::Acquire) < MIN_THREADS {
             self.spawn_thread(true);
         }
-
+        
+        // FIXME potential race condition where thread is not yet waiting on the condvar. Support
+        // spawning threads with a task directly in the case there are 0 waiting
         self.shared.condvar.notify_one();
     }
 }
