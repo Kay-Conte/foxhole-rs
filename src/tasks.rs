@@ -80,7 +80,7 @@ impl Task for ConnectionTask {
             self.task_pool.send_task(RequestTask {
                 cache: self.cache.clone(),
                 request: req.map(|_| lazy),
-                writer: writer.0,
+                stream: writer.0,
                 router: self.router.clone(),
             });
 
@@ -111,7 +111,7 @@ pub struct RequestTask {
 
     pub request: Request<Lazy<RawData>>,
 
-    pub writer: SequentialStream<TcpStream>,
+    pub stream: SequentialStream<TcpStream>,
 
     /// A handle to the applications router tree
     pub router: Arc<Route>,
@@ -136,11 +136,14 @@ impl Task for RequestTask {
             for system in cursor.systems() {
                 match system.call(&ctx, &mut path_iter) {
                     Action::Response(r) => {
-                        self.writer.send(&r.into_raw_bytes()).unwrap();
+                        self.stream.send(&r.into_raw_bytes()).unwrap();
 
                         return;
                     }
-                    Action::Upgrade(f) => f(),
+                    Action::Upgrade(f) => {
+                        f(self.stream.take_stream());
+                        return;
+                    }
                     Action::None => {}
                 }
             }
@@ -156,7 +159,7 @@ impl Task for RequestTask {
             }
         }
 
-        let _ = self.writer.send(&404u16.response().into_raw_bytes());
+        let _ = self.stream.send(&404u16.response().into_raw_bytes());
     }
 }
 

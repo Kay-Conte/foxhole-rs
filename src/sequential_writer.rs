@@ -1,6 +1,6 @@
 use std::{
     io::{Write, Read},
-    sync::mpsc::{channel, Receiver, Sender}, net::TcpStream,
+    sync::mpsc::{channel, Receiver, Sender},
 };
 
 pub enum State<W> {

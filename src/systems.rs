@@ -1,3 +1,5 @@
+use std::net::TcpStream;
+
 use http::{Method, Response, Version};
 
 use crate::{http_utils::IntoRawBytes, tasks::{RequestState, PathIter}, type_cache::TypeCacheKey};
@@ -47,7 +49,7 @@ impl IntoResponse for Html {
 
 pub enum Action {
     Response(RawResponse),
-    Upgrade(fn()),
+    Upgrade(fn(TcpStream)),
     None,
 }
 
