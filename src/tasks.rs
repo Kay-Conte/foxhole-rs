@@ -1,6 +1,6 @@
 use std::{
     collections::VecDeque,
-    io::{BufReader, Read},
+    io::{BufReader, Read, Write},
     iter::Peekable,
     net::TcpStream,
     str::Split,
@@ -23,6 +23,7 @@ use crate::{
     IntoResponse,
 };
 
+const MIN_THREAD_COUNT: usize = 4;
 const TIMEOUT: u64 = 5;
 
 pub type PathIter<'a> = Peekable<Split<'a, &'static str>>;
@@ -65,14 +66,14 @@ impl Task for ConnectionTask {
 
             let keep_alive = req
                 .headers()
-                .get("connection")
+                .get("Connection")
                 .and_then(|v| v.to_str().ok())
                 .map(|s| s == "keep-alive")
                 .unwrap_or(false);
 
             let body_len = req
                 .headers()
-                .get("content-length")
+                .get("Content-Length")
                 .and_then(|v| v.to_str().ok())
                 .and_then(|s| s.parse::<usize>().ok())
                 .unwrap_or(0);
@@ -141,7 +142,12 @@ impl Task for RequestTask {
                         return;
                     }
                     Action::Upgrade(f) => {
-                        f(self.stream.take_stream());
+                        let mut stream = self.stream.take_stream();
+
+                        // FIXME this is not a valid response to 'Connection: upgrade'
+                        let _ = stream.write_all(&101u16.response().into_raw_bytes());
+
+                        f(stream);
                         return;
                     }
                     Action::None => {}
@@ -204,6 +210,10 @@ impl TaskPool {
             }),
         };
 
+        for _ in 0..MIN_THREAD_COUNT {
+            pool.spawn_thread(false)
+        }
+
         pool
     }
 
@@ -215,7 +225,7 @@ impl TaskPool {
     /// likely remain until there is a graceful shutdown mechanism
     ///
     /// This function can also panic on 0 duration.
-    fn spawn_thread(&self) {
+    fn spawn_thread(&self, should_cull: bool) {
         let shared = self.shared.clone();
 
         std::thread::spawn(move || {
@@ -224,17 +234,21 @@ impl TaskPool {
 
                 shared.waiting();
 
-                let (new, timeout) = shared
-                    .condvar
-                    .wait_timeout(pool, Duration::from_secs(5))
-                    .unwrap();
+                if should_cull {
+                    let (new, timeout) = shared
+                        .condvar
+                        .wait_timeout(pool, Duration::from_secs(5))
+                        .unwrap();
 
-                if timeout.timed_out() {
-                    // Make sure not to bloat waiting count
-                    break;
+                    if timeout.timed_out() {
+                        // Make sure not to bloat waiting count
+                        break;
+                    }
+
+                    pool = new;
+                } else {
+                    pool = shared.condvar.wait(pool).unwrap()
                 }
-
-                pool = new;
 
                 shared.release();
 
@@ -261,8 +275,8 @@ impl TaskPool {
     {
         self.shared.pool.lock().unwrap().push_back(Box::new(task));
 
-        if self.shared.waiting_tasks.load(Ordering::Acquire) == 0 {
-            self.spawn_thread();
+        if self.shared.waiting_tasks.load(Ordering::Acquire) < MIN_THREAD_COUNT {
+            self.spawn_thread(true);
         }
 
         self.shared.condvar.notify_one();

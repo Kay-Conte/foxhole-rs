@@ -262,11 +262,11 @@ impl<'a> Resolve<'a> for ConnectionUpgrade {
     type Output = Self;
 
     fn resolve(ctx: &'a RequestState, _path_iter: &mut PathIter) -> ResolveGuard<Self> {
-        let Some(connection) = ctx.request.headers().get("connection").and_then(|i| i.to_str().ok()) else {
+        let Some(connection) = ctx.request.headers().get("Upgrade").and_then(|i| i.to_str().ok()) else {
             return ResolveGuard::None;
         };
 
-        if connection == "upgrade" {
+        if connection == "websocket" {
             ResolveGuard::Value(ConnectionUpgrade)
         } else {
             ResolveGuard::None
