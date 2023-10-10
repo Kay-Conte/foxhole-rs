@@ -248,6 +248,24 @@ impl<'a> Resolve<'a> for UrlCollect {
     }
 }
 
+pub struct ConnectionUpgrade;
+
+impl<'a> Resolve<'a> for ConnectionUpgrade {
+    type Output = Self;
+
+    fn resolve(ctx: &'a RequestState, _path_iter: &mut PathIter) -> ResolveGuard<Self> {
+        let Some(connection) = ctx.request.headers().get("connection").and_then(|i| i.to_str().ok()) else {
+            return ResolveGuard::None;
+        };
+
+        if connection == "upgrade" {
+            ResolveGuard::Value(ConnectionUpgrade)
+        } else {
+            ResolveGuard::None
+        }
+    }
+}
+
 #[doc(hidden)]
 pub trait System<'a, T> {
     fn run(self, ctx: &'a RequestState, path_iter: &mut PathIter) -> Action;
