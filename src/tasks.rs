@@ -22,7 +22,6 @@ use crate::{
     IntoResponse, systems::Action,
 };
 
-const MIN_THREADS: usize = 4;
 const TIMEOUT: u64 = 5;
 
 pub type PathIter<'a> = Peekable<Split<'a, &'static str>>;
@@ -193,10 +192,6 @@ impl TaskPool {
             }),
         };
 
-        for _ in 0..MIN_THREADS {
-            pool.spawn_thread(false);
-        }
-
         pool
     }
 
@@ -208,7 +203,7 @@ impl TaskPool {
     /// likely remain until there is a graceful shutdown mechanism
     ///
     /// This function can also panic on 0 duration.
-    fn spawn_thread(&self, should_cull: bool) {
+    fn spawn_thread(&self) {
         let shared = self.shared.clone();
 
         std::thread::spawn(move || {
@@ -217,21 +212,17 @@ impl TaskPool {
 
                 shared.waiting();
 
-                if should_cull {
-                    let (new, timeout) = shared
-                        .condvar
-                        .wait_timeout(pool, Duration::from_secs(5))
-                        .unwrap();
+                let (new, timeout) = shared
+                    .condvar
+                    .wait_timeout(pool, Duration::from_secs(5))
+                    .unwrap();
 
-                    if timeout.timed_out() {
-                        // Make sure not to bloat waiting count
-                        break;
-                    }
-
-                    pool = new;
-                } else {
-                    pool = shared.condvar.wait(pool).unwrap();
+                if timeout.timed_out() {
+                    // Make sure not to bloat waiting count
+                    break;
                 }
+
+                pool = new;
 
                 shared.release();
 
@@ -258,8 +249,8 @@ impl TaskPool {
     {
         self.shared.pool.lock().unwrap().push_back(Box::new(task));
 
-        if self.shared.waiting_tasks.load(Ordering::Acquire) < MIN_THREADS {
-            self.spawn_thread(true);
+        if self.shared.waiting_tasks.load(Ordering::Acquire) == 0 {
+            self.spawn_thread();
         }
 
         self.shared.condvar.notify_one();
