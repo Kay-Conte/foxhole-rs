@@ -1,6 +1,6 @@
 use std::{
     collections::VecDeque,
-    io::{BufReader, Read},
+    io::{BufReader, Read, Write},
     iter::Peekable,
     net::TcpStream,
     str::Split,
@@ -17,12 +17,13 @@ use crate::{
     http_utils::{take_request, IntoRawBytes},
     lazy::Lazy,
     routing::Route,
-    sequential_writer::{self, SequentialWriter},
+    sequential_writer::{self, SequentialStream},
+    systems::Action,
     type_cache::TypeCacheShared,
-    MaybeIntoResponse,
+    IntoResponse,
 };
 
-const MIN_THREADS: usize = 4;
+const MIN_THREAD_COUNT: usize = 4;
 const TIMEOUT: u64 = 5;
 
 pub type PathIter<'a> = Peekable<Split<'a, &'static str>>;
@@ -56,16 +57,23 @@ impl Task for ConnectionTask {
             return;
         };
 
-        let mut writer = SequentialWriter::new(sequential_writer::State::Writer(writer));
+        let mut writer = SequentialStream::new(sequential_writer::State::Writer(writer));
 
         let mut reader = BufReader::new(self.stream);
 
         while let Ok(req) = take_request(&mut reader) {
             let (lazy, sender) = Lazy::new();
 
+            let keep_alive = req
+                .headers()
+                .get("Connection")
+                .and_then(|v| v.to_str().ok())
+                .map(|s| s == "keep-alive")
+                .unwrap_or(false);
+
             let body_len = req
                 .headers()
-                .get("content-length")
+                .get("Content-Length")
                 .and_then(|v| v.to_str().ok())
                 .and_then(|s| s.parse::<usize>().ok())
                 .unwrap_or(0);
@@ -73,7 +81,7 @@ impl Task for ConnectionTask {
             self.task_pool.send_task(RequestTask {
                 cache: self.cache.clone(),
                 request: req.map(|_| lazy),
-                writer: writer.0,
+                stream: writer.0,
                 router: self.router.clone(),
             });
 
@@ -90,7 +98,11 @@ impl Task for ConnectionTask {
             // reading the body.
             let _ = sender.send(buf);
 
-            writer = SequentialWriter::new(sequential_writer::State::Waiting(writer.1));
+            writer = SequentialStream::new(sequential_writer::State::Waiting(writer.1));
+
+            if !keep_alive {
+                return;
+            }
         }
     }
 }
@@ -100,7 +112,7 @@ pub struct RequestTask {
 
     pub request: Request<Lazy<RawData>>,
 
-    pub writer: SequentialWriter<TcpStream>,
+    pub stream: SequentialStream<TcpStream>,
 
     /// A handle to the applications router tree
     pub router: Arc<Route>,
@@ -123,10 +135,22 @@ impl Task for RequestTask {
 
         loop {
             for system in cursor.systems() {
-                if let Some(r) = system.call(&ctx, &mut path_iter) {
-                    self.writer.send(&r.into_raw_bytes()).unwrap();
+                match system.call(&ctx, &mut path_iter) {
+                    Action::Response(r) => {
+                        self.stream.send(&r.into_raw_bytes()).unwrap();
 
-                    return;
+                        return;
+                    }
+                    Action::Upgrade(f) => {
+                        let mut stream = self.stream.take_stream();
+
+                        // FIXME this is not a valid response to 'Connection: upgrade'
+                        let _ = stream.write_all(&101u16.response().into_raw_bytes());
+
+                        f(stream);
+                        return;
+                    }
+                    Action::None => {}
                 }
             }
 
@@ -141,9 +165,7 @@ impl Task for RequestTask {
             }
         }
 
-        let _ = self
-            .writer
-            .send(&404u16.maybe_response().unwrap().into_raw_bytes());
+        let _ = self.stream.send(&404u16.response().into_raw_bytes());
     }
 }
 
@@ -188,8 +210,8 @@ impl TaskPool {
             }),
         };
 
-        for _ in 0..MIN_THREADS {
-            pool.spawn_thread(false);
+        for _ in 0..MIN_THREAD_COUNT {
+            pool.spawn_thread(false)
         }
 
         pool
@@ -225,7 +247,7 @@ impl TaskPool {
 
                     pool = new;
                 } else {
-                    pool = shared.condvar.wait(pool).unwrap();
+                    pool = shared.condvar.wait(pool).unwrap()
                 }
 
                 shared.release();
@@ -253,7 +275,7 @@ impl TaskPool {
     {
         self.shared.pool.lock().unwrap().push_back(Box::new(task));
 
-        if self.shared.waiting_tasks.load(Ordering::Acquire) < MIN_THREADS {
+        if self.shared.waiting_tasks.load(Ordering::Acquire) < MIN_THREAD_COUNT {
             self.spawn_thread(true);
         }
 

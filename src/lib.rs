@@ -15,7 +15,7 @@ pub use tasks::PathIter;
 
 pub use framework::run;
 pub use routing::Route;
-pub use systems::{Get, IntoResponse, MaybeIntoResponse, Post, Resolve, ResolveGuard};
+pub use systems::{Get, IntoResponse, IntoAction, Post, Resolve, ResolveGuard};
 pub use tasks::RequestState;
 
 pub use http;
