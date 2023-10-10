@@ -1,19 +1,13 @@
-// use foxhole::Route;
-//
-// struct Upgrade;
-//
-// fn receive_messages(ws: Upgrade) -> Websocket {
-//     ws.upgrade(|ws| {
-//
-//     })
-// }
-//
-// fn upgrade() -> Websocket {
-//     Websocket(|ws| {
-//
-//     })
-// }
-//
+use foxhole::{Route, systems::{ConnectionUpgrade, AcceptConnectionUpgrade}, sys, run};
+
+fn upgrade(ws: ConnectionUpgrade) -> AcceptConnectionUpgrade {
+    ws.upgrade(|_ws| { 
+        println!("Websocket connected successfully");
+    })
+}
+
 fn main() {
-    // Route::new(sys![upgrade])
+    let router = Route::new(sys![upgrade]);
+
+    run("0.0.0.0:8080", router);
 }

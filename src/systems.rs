@@ -105,6 +105,14 @@ where
     }
 }
 
+pub struct AcceptConnectionUpgrade(fn(TcpStream));
+
+impl IntoAction for AcceptConnectionUpgrade {
+    fn into_action(self) -> Action {
+        Action::Upgrade(self.0)
+    }
+}
+
 
 
 /// `Resolve` is a trait used to construct values needed to call a given `System`. All parameters
@@ -263,6 +271,12 @@ impl<'a> Resolve<'a> for ConnectionUpgrade {
         } else {
             ResolveGuard::None
         }
+    }
+}
+
+impl ConnectionUpgrade {
+    pub fn upgrade(self, f: fn(TcpStream)) -> AcceptConnectionUpgrade {
+        AcceptConnectionUpgrade(f)
     }
 }
 
