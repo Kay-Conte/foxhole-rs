@@ -1,6 +1,6 @@
 use std::{
-    io::Write,
-    sync::mpsc::{channel, Receiver, Sender},
+    io::{Write, Read},
+    sync::mpsc::{channel, Receiver, Sender}, net::TcpStream,
 };
 
 pub enum State<W> {
@@ -9,19 +9,19 @@ pub enum State<W> {
 }
 
 /// A synchronization type to order writes to a writer.
-pub struct SequentialWriter<W>
+pub struct SequentialStream<W>
 where
-    W: Write + Send,
+    W: Read + Write + Send + Sync,
 {
     state: State<W>,
     next: Sender<W>,
 }
 
-impl<W> SequentialWriter<W>
+impl<S> SequentialStream<S>
 where
-    W: Write + Send + Sync,
+    S: Read + Write + Send + Sync,
 {
-    pub fn new(state: State<W>) -> (Self, Receiver<W>) {
+    pub fn new(state: State<S>) -> (Self, Receiver<S>) {
         let (sender, receiver) = channel();
 
         (
@@ -33,6 +33,14 @@ where
         )
     }
 
+    pub fn take_stream(self) -> S {
+        match self.state {
+            State::Writer(w) => w,
+            State::Waiting(r) => r.recv().expect("Failed to get writer from the receiver"),
+        }
+    }
+
+
     /// # Blocks
     ///
     /// This function blocks while waiting to receive the writer handle. This has the potential to
@@ -43,16 +51,16 @@ where
     /// This function should only panic if the previous `Sender` has closed without sending a
     /// writer
     pub fn send(self, bytes: &[u8]) -> std::io::Result<()> {
-        let mut writer = match self.state {
+        let mut stream = match self.state {
             State::Writer(w) => w,
             State::Waiting(r) => r.recv().expect("Failed to get writer from the receiver"),
         };
 
-        writer.write_all(bytes)?;
+        stream.write_all(bytes)?;
 
-        writer.flush()?;
+        stream.flush()?;
 
-        let _ = self.next.send(writer);
+        let _ = self.next.send(stream);
 
         Ok(())
     }

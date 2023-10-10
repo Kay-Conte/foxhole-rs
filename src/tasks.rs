@@ -17,9 +17,10 @@ use crate::{
     http_utils::{take_request, IntoRawBytes},
     lazy::Lazy,
     routing::Route,
-    sequential_writer::{self, SequentialWriter},
+    sequential_writer::{self, SequentialStream},
+    systems::Action,
     type_cache::TypeCacheShared,
-    IntoResponse, systems::Action,
+    IntoResponse,
 };
 
 const TIMEOUT: u64 = 5;
@@ -55,14 +56,19 @@ impl Task for ConnectionTask {
             return;
         };
 
-        let mut writer = SequentialWriter::new(sequential_writer::State::Writer(writer));
+        let mut writer = SequentialStream::new(sequential_writer::State::Writer(writer));
 
         let mut reader = BufReader::new(self.stream);
 
         while let Ok(req) = take_request(&mut reader) {
             let (lazy, sender) = Lazy::new();
 
-            let keep_alive = req.headers().get("Connection").and_then(|v| v.to_str().ok()).map(|s| s == "keep-alive").unwrap_or(false);
+            let keep_alive = req
+                .headers()
+                .get("connection")
+                .and_then(|v| v.to_str().ok())
+                .map(|s| s == "keep-alive")
+                .unwrap_or(false);
 
             let body_len = req
                 .headers()
@@ -91,7 +97,7 @@ impl Task for ConnectionTask {
             // reading the body.
             let _ = sender.send(buf);
 
-            writer = SequentialWriter::new(sequential_writer::State::Waiting(writer.1));
+            writer = SequentialStream::new(sequential_writer::State::Waiting(writer.1));
 
             if !keep_alive {
                 return;
@@ -105,7 +111,7 @@ pub struct RequestTask {
 
     pub request: Request<Lazy<RawData>>,
 
-    pub writer: SequentialWriter<TcpStream>,
+    pub writer: SequentialStream<TcpStream>,
 
     /// A handle to the applications router tree
     pub router: Arc<Route>,
@@ -128,7 +134,6 @@ impl Task for RequestTask {
 
         loop {
             for system in cursor.systems() {
-
                 match system.call(&ctx, &mut path_iter) {
                     Action::Response(r) => {
                         self.writer.send(&r.into_raw_bytes()).unwrap();
@@ -151,9 +156,7 @@ impl Task for RequestTask {
             }
         }
 
-        let _ = self
-            .writer
-            .send(&404u16.response().into_raw_bytes());
+        let _ = self.writer.send(&404u16.response().into_raw_bytes());
     }
 }
 
