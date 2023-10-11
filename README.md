@@ -1,5 +1,6 @@
 <div align="center">
-  <h1>Foxhole</h1>
+  <img width=500 src="https://github.com/Kay-Conte/foxhole-rs/blob/main/fox_hole_logo.png">
+  <h1></img>Foxhole</h1>
   <p>
     <strong>A Synchronous HTTP framework for Rust</strong>
   </p>
