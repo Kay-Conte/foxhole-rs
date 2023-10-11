@@ -20,7 +20,7 @@ use crate::{
     sequential_writer::{self, SequentialStream},
     systems::Action,
     type_cache::TypeCacheShared,
-    IntoResponse,
+    IntoResponse, websocket::Websocket,
 };
 
 const MIN_THREAD_COUNT: usize = 4;
@@ -147,7 +147,9 @@ impl Task for RequestTask {
                         // FIXME this is not a valid response to 'Connection: upgrade'
                         let _ = stream.write_all(&101u16.response().into_raw_bytes());
 
-                        f(stream);
+                        let _ = stream.set_read_timeout(None);
+
+                        f(Websocket::new(stream));
                         return;
                     }
                     Action::None => {}

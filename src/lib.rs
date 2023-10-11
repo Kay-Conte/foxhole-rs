@@ -6,6 +6,7 @@ pub mod macros;
 pub mod routing;
 pub mod systems;
 pub mod type_cache;
+pub mod websocket;
 
 mod sequential_writer;
 mod lazy;

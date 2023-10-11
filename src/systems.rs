@@ -1,8 +1,6 @@
-use std::net::TcpStream;
-
 use http::{Method, Response, Version};
 
-use crate::{http_utils::IntoRawBytes, tasks::{RequestState, PathIter}, type_cache::TypeCacheKey};
+use crate::{http_utils::IntoRawBytes, tasks::{RequestState, PathIter}, type_cache::TypeCacheKey, websocket::Websocket};
 
 pub type RawResponse = Response<Vec<u8>>;
 
@@ -49,7 +47,7 @@ impl IntoResponse for Html {
 
 pub enum Action {
     Response(RawResponse),
-    Upgrade(fn(TcpStream)),
+    Upgrade(fn(Websocket)),
     None,
 }
 
@@ -105,9 +103,9 @@ where
     }
 }
 
-pub struct AcceptConnectionUpgrade(fn(TcpStream));
+pub struct WebsocketHandler(fn(Websocket));
 
-impl IntoAction for AcceptConnectionUpgrade {
+impl IntoAction for WebsocketHandler {
     fn into_action(self) -> Action {
         Action::Upgrade(self.0)
     }
@@ -256,9 +254,9 @@ impl<'a> Resolve<'a> for UrlCollect {
     }
 }
 
-pub struct ConnectionUpgrade;
+pub struct Upgrade;
 
-impl<'a> Resolve<'a> for ConnectionUpgrade {
+impl<'a> Resolve<'a> for Upgrade {
     type Output = Self;
 
     fn resolve(ctx: &'a RequestState, _path_iter: &mut PathIter) -> ResolveGuard<Self> {
@@ -267,16 +265,16 @@ impl<'a> Resolve<'a> for ConnectionUpgrade {
         };
 
         if connection == "websocket" {
-            ResolveGuard::Value(ConnectionUpgrade)
+            ResolveGuard::Value(Upgrade)
         } else {
             ResolveGuard::None
         }
     }
 }
 
-impl ConnectionUpgrade {
-    pub fn upgrade(self, f: fn(TcpStream)) -> AcceptConnectionUpgrade {
-        AcceptConnectionUpgrade(f)
+impl Upgrade {
+    pub fn upgrade(self, f: fn(Websocket)) -> WebsocketHandler {
+        WebsocketHandler(f)
     }
 }
 

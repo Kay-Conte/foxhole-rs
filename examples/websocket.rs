@@ -1,8 +1,15 @@
-use foxhole::{Route, systems::{ConnectionUpgrade, AcceptConnectionUpgrade}, sys, run};
+use foxhole::{Route, systems::{Upgrade, WebsocketHandler}, sys, run, websocket::Frame};
 
-fn upgrade(ws: ConnectionUpgrade) -> AcceptConnectionUpgrade {
-    ws.upgrade(|_ws| { 
-        println!("Websocket connected successfully");
+fn upgrade(ws: Upgrade) -> WebsocketHandler {
+    ws.upgrade(|ws| { 
+        for frame in ws {
+            let text = match frame {
+                Frame::Text(c) => String::from_utf8(c).unwrap(),
+                _ => continue,
+            };
+
+            println!("{}", text);
+        }
     })
 }
 
