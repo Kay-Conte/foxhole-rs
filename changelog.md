@@ -8,6 +8,9 @@
   - `Css` a response with the `text/css` content type hint
   - `Js` a response with the `text/javascript` content type hint
 
+### Changed
+- Renamed `MaybeIntoResponse` to `Action`
+
 # [0.3.0]
 
 ### Added
@@ -16,7 +19,7 @@
 ### Removed
 - Cargo.lock is no longer synced
 
-### Changes 
+### Changed 
 - `Vegemite` is now `Foxhole`
 - `Resolve` trait now takes a lifetime and is capable of returning refernces
   to the state

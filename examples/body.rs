@@ -1,4 +1,7 @@
-use foxhole::{RequestState, Resolve, ResolveGuard, Route, sys, run, PathIter, Post};
+use foxhole::{
+    resolve::{Post, Resolve, ResolveGuard},
+    run, sys, PathIter, RequestState, Route,
+};
 
 use std::str;
 
@@ -14,7 +17,7 @@ impl<'a, 'b> Resolve<'b> for Body<'a> {
     }
 }
 
-fn post(_post: Post, body: Body) -> u16{
+fn post(_post: Post, body: Body) -> u16 {
     println!("Body: {}", body.0);
 
     200
@@ -23,5 +26,5 @@ fn post(_post: Post, body: Body) -> u16{
 fn main() {
     let route = Route::new(sys![post]);
 
-    run("127.0.0.1:8080", route); 
+    run("127.0.0.1:8080", route);
 }

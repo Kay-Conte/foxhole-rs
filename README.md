@@ -31,7 +31,7 @@ Foxhole is a simple, fast, synchronous framework built for finishing your projec
 Foxhole uses a set of handler systems and routing modules to handle requests and responses.   
 Here's a starting example of a Hello World server.
 ```rust
-use foxhole::{systems::Html, run, sys, Get, Route};
+use foxhole::{resolve::Get, action::Html, run, sys, Route};
 
 fn get(_get: Get) -> Html {
     Html("<h1> Foxhole </h1>".to_string())
@@ -68,7 +68,7 @@ Any type that implements the trait `Resolve` is viable to use as a parameter.
 
 ### Example
 ```rust
-use foxhole::{http::Method, PathIter, RequestState, Resolve, ResolveGuard};
+use foxhole::{http::Method, PathIter, RequestState, resolve::{Resolve, ResolveGuard}};
 
 pub struct Get;
 

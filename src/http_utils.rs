@@ -5,7 +5,7 @@ use http::{Request, Response, Version};
 
 use std::io::{BufRead, Write};
 
-use crate::systems::RawResponse;
+use crate::action::RawResponse;
 
 /// Errors while parsing requests.
 #[derive(Debug, PartialEq)]
@@ -310,7 +310,6 @@ mod tests {
 
         let resp = take_request(&mut reader);
         assert!(matches!(resp, Err(ParseError::MalformedRequest)));
-
     }
 
     #[test]

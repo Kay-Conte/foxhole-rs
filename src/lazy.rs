@@ -24,8 +24,6 @@ impl<T> Lazy<T> {
 
     /// This call blocks until the body has been read from the `TcpStream`
     pub fn get<'a>(&'a self) -> &T {
-        self.value.get_or_init(|| {
-            self.receiver.recv().unwrap()
-        })
+        self.value.get_or_init(|| self.receiver.recv().unwrap())
     }
 }

@@ -1,4 +1,4 @@
-use foxhole::{systems::Html, run, sys, Get, Route};
+use foxhole::{action::Html, resolve::Get, run, sys, Route};
 
 fn get(_get: Get) -> Html {
     Html("<h1> Foxhole </h1>".to_string())

@@ -1,14 +1,13 @@
 use foxhole::{
     http_utils::IntoRawBytes,
-    run, sys,
-    systems::{Endpoint, UrlCollect, UrlPart},
-    Get, IntoResponse, Response, Route,
+    resolve::{Endpoint, Get, UrlCollect, UrlPart},
+    run, sys, IntoResponse, Response, Route,
 };
 
 pub struct User(String);
 
 impl IntoResponse for User {
-    fn response(self) -> foxhole::systems::RawResponse {
+    fn response(self) -> foxhole::action::RawResponse {
         let bytes = self.0.into_raw_bytes();
 
         Response::builder()
