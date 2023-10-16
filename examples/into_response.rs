@@ -1,13 +1,11 @@
 use foxhole::{run, sys, systems::Endpoint, Get, IntoResponse, Response, Route};
 
 // This is a reimplementation of the provided `Html` type.
-struct Html {
-    value: String,
-}
+struct Html(String);
 
 impl IntoResponse for Html {
     fn response(self) -> Response<Vec<u8>> {
-        let bytes = self.value.into_bytes();
+        let bytes = self.0.into_bytes();
 
         Response::builder()
             .status(200)
@@ -19,9 +17,7 @@ impl IntoResponse for Html {
 }
 
 fn page(_get: Get, _e: Endpoint) -> Html {
-    Html {
-        value: "<h1> Hey Friend </h1>".to_string(),
-    }
+    Html("<h1> Hey Friend </h1>".to_string())
 }
 
 fn favicon(_get: Get, _e: Endpoint) -> u16 {
