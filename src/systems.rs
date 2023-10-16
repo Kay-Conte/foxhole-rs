@@ -4,6 +4,8 @@ use crate::{http_utils::IntoRawBytes, tasks::{RequestState, PathIter}, type_cach
 
 pub type RawResponse = Response<Vec<u8>>;
 
+/// This is a helper trait to remove the unnecessary `Option` many response types don't need as
+/// they do not affect control flow.
 pub trait IntoResponse {
     fn response(self) -> RawResponse;
 }
@@ -73,6 +75,8 @@ impl IntoResponse for u16 {
     }
 }
 
+/// Creates a response with the content-type `application/x-binary` there may be a better MIME type
+/// to use for this.
 pub struct Raw(Vec<u8>);
 
 impl IntoResponse for Raw {
@@ -87,6 +91,7 @@ impl IntoResponse for Raw {
     }
 }
 
+/// Creates a response with the content-type `text/plain`
 pub struct Plain(pub String);
 
 impl IntoResponse for Plain {
@@ -103,6 +108,7 @@ impl IntoResponse for Plain {
     }
 }
 
+/// Creates a response with the content-type `text/html`
 pub struct Html(pub String);
 
 impl IntoResponse for Html {
@@ -119,6 +125,7 @@ impl IntoResponse for Html {
     }
 }
 
+/// Creates a response with the content-type `text/css`
 pub struct Css(pub String);
 
 impl IntoResponse for Css {
@@ -135,6 +142,7 @@ impl IntoResponse for Css {
     }
 }
 
+/// Creates a response with the content-type `text/javascript`
 pub struct Js(pub String);
 
 impl IntoResponse for Js {
