@@ -27,11 +27,7 @@ fn user(_g: Get, part: UrlPart, _e: Endpoint) -> User {
 }
 
 fn collect(_g: Get, collect: UrlCollect) -> Option<User> {
-    if let Some(part) = collect.0.into_iter().next() {
-        return Some(User(part));
-    } else {
-        None
-    }
+    collect.0.into_iter().next().map(|i| User(i))
 }
 
 fn main() {
