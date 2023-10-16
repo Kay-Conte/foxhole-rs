@@ -87,6 +87,22 @@ impl IntoResponse for Raw {
     }
 }
 
+pub struct Plain(pub String);
+
+impl IntoResponse for Plain {
+    fn response(self) -> Response<Vec<u8>> {
+        let bytes = self.0.into_bytes();
+
+        Response::builder()
+            .version(Version::HTTP_11)
+            .status(200)
+            .header("Content-Type", "text/plain; charset=utf-8")
+            .header("Content-Length", format!("{}", bytes.len()))
+            .body(bytes)
+            .unwrap()
+    }
+}
+
 pub struct Html(pub String);
 
 impl IntoResponse for Html {
@@ -97,6 +113,38 @@ impl IntoResponse for Html {
             .version(Version::HTTP_11)
             .status(200)
             .header("Content-Type", "text/html; charset=utf-8")
+            .header("Content-Length", format!("{}", bytes.len()))
+            .body(bytes)
+            .unwrap()
+    }
+}
+
+pub struct Css(pub String);
+
+impl IntoResponse for Css {
+    fn response(self) -> Response<Vec<u8>> {
+        let bytes = self.0.into_bytes();
+
+        Response::builder()
+            .version(Version::HTTP_11)
+            .status(200)
+            .header("Content-Type", "text/css; charset=utf-8")
+            .header("Content-Length", format!("{}", bytes.len()))
+            .body(bytes)
+            .unwrap()
+    }
+}
+
+pub struct Js(pub String);
+
+impl IntoResponse for Js {
+    fn response(self) -> Response<Vec<u8>> {
+        let bytes = self.0.into_bytes();
+
+        Response::builder()
+            .version(Version::HTTP_11)
+            .status(200)
+            .header("Content-Type", "text/javascript; charset=utf-8")
             .header("Content-Length", format!("{}", bytes.len()))
             .body(bytes)
             .unwrap()
