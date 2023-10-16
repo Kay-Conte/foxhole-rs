@@ -80,7 +80,7 @@ impl IntoResponse for Raw {
         Response::builder()
             .version(Version::HTTP_11)
             .status(200)
-            .header("Content-Type", "text/html; charset=utf-8")
+            .header("Content-Type", "application/x-binary")
             .header("Content-Length", format!("{}", self.0.len()))
             .body(self.0)
             .unwrap()

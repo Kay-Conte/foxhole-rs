@@ -1,5 +1,13 @@
 # [unreleased]
 
+### Added
+- Various new `Resolve` and `Response` types
+  - `&Vec<u8>` is now resolve, representing the raw body of the request 
+  - `&str` is now resolve, representing the str representation of the request
+  - `Raw` a response with the `application/x-binary` content type hint
+  - `Css` a response with the `text/css` content type hint
+  - `Js` a response with the `text/javascript` content type hint
+
 # [0.3.0]
 
 ### Added
