@@ -73,6 +73,20 @@ impl IntoResponse for u16 {
     }
 }
 
+pub struct Raw(Vec<u8>);
+
+impl IntoResponse for Raw {
+    fn response(self) -> RawResponse {
+        Response::builder()
+            .version(Version::HTTP_11)
+            .status(200)
+            .header("Content-Type", "text/html; charset=utf-8")
+            .header("Content-Length", format!("{}", self.0.len()))
+            .body(self.0)
+            .unwrap()
+    }
+}
+
 pub struct Html(pub String);
 
 impl IntoResponse for Html {
@@ -227,6 +241,22 @@ impl<'a> Resolve<'a> for UrlCollect {
         }
 
         ResolveGuard::Value(UrlCollect(collect))
+    }
+}
+
+impl<'a, 'b> Resolve<'a> for &'b Vec<u8> {
+    type Output = &'a Vec<u8>;
+
+    fn resolve(ctx: &'a RequestState, _path_iter: &mut PathIter) -> ResolveGuard<Self::Output> {
+        ResolveGuard::Value(ctx.request.body().get())
+    }
+}
+
+impl<'a, 'b> Resolve<'a> for &'b str {
+    type Output = &'a str;
+
+    fn resolve(ctx: &'a RequestState, _path_iter: &mut PathIter) -> ResolveGuard<Self::Output> {
+        std::str::from_utf8(ctx.request.body().get()).ok().into()
     }
 }
 
