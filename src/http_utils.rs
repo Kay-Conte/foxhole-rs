@@ -13,7 +13,6 @@ pub enum ParseError {
     MalformedRequest,
     ReadError,
 
-    InvalidMethod,
     InvalidProtocolVer,
     InvalidRequestParts,
 }
@@ -24,7 +23,6 @@ impl std::fmt::Display for ParseError {
             ParseError::MalformedRequest => write!(f, "Malformed Request"),
             ParseError::ReadError => write!(f, "Read Error"),
 
-            ParseError::InvalidMethod => write!(f, "Invalid Method"),
             ParseError::InvalidProtocolVer => write!(f, "Invalid Protocol"),
             ParseError::InvalidRequestParts => write!(f, "Invalid Request Parts"),
         }
@@ -66,13 +64,6 @@ impl VersionExt for Version {
     }
 }
 
-fn validate_method(method: &str) -> bool {
-    matches!(
-        method,
-        "GET" | "POST" | "PUT" | "DELETE" | "HEAD" | "OPTIONS" | "CONNECT" | "TRACE" | "PATH"
-    )
-}
-
 /// the entirety of the header must be valid utf8
 pub fn take_request<R>(reader: &mut R) -> Result<Request<()>, ParseError>
 where
@@ -88,10 +79,6 @@ where
     let mut parts = line.split(' ');
 
     let method = parts.next().ok_or(ParseError::MalformedRequest)?;
-
-    if !validate_method(method) {
-        return Err(ParseError::InvalidMethod);
-    }
 
     let uri = parts.next().ok_or(ParseError::MalformedRequest)?;
 
@@ -268,7 +255,7 @@ mod tests {
         let mut reader = BufReader::new(&bytes[..]);
 
         let resp = take_request(&mut reader);
-        assert!(matches!(resp, Err(ParseError::InvalidMethod)));
+        assert!(matches!(resp, Err(ParseError::MalformedRequest)));
     }
 
     #[test]
