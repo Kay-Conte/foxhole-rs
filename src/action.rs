@@ -95,7 +95,7 @@ impl IntoResponse for Raw {
 pub struct Plain(pub String);
 
 impl IntoResponse for Plain {
-    fn response(self) -> Response<Vec<u8>> {
+    fn response(self) -> RawResponse {
         let bytes = self.0.into_bytes();
 
         Response::builder()
@@ -112,7 +112,7 @@ impl IntoResponse for Plain {
 pub struct Html(pub String);
 
 impl IntoResponse for Html {
-    fn response(self) -> Response<Vec<u8>> {
+    fn response(self) -> RawResponse {
         let bytes = self.0.into_bytes();
 
         Response::builder()
@@ -129,7 +129,7 @@ impl IntoResponse for Html {
 pub struct Css(pub String);
 
 impl IntoResponse for Css {
-    fn response(self) -> Response<Vec<u8>> {
+    fn response(self) -> RawResponse {
         let bytes = self.0.into_bytes();
 
         Response::builder()
@@ -146,7 +146,7 @@ impl IntoResponse for Css {
 pub struct Js(pub String);
 
 impl IntoResponse for Js {
-    fn response(self) -> Response<Vec<u8>> {
+    fn response(self) -> RawResponse {
         let bytes = self.0.into_bytes();
 
         Response::builder()
