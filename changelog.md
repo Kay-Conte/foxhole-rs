@@ -10,6 +10,7 @@
 
 ### Changed
 - Renamed `MaybeIntoResponse` to `Action`
+- Refactored various items into modules `resolve` and `action` exports to related items have changed
 
 # [0.3.0]
 
