@@ -187,7 +187,7 @@ impl TaskPool {
         };
 
         for _ in 0..MIN_THREADS {
-            pool.spawn_thread(false);
+            pool.spawn_thread(false, None);
         }
 
         pool
@@ -201,10 +201,15 @@ impl TaskPool {
     /// likely remain until there is a graceful shutdown mechanism
     ///
     /// This function can also panic on 0 duration.
-    fn spawn_thread(&self, should_cull: bool) {
+    fn spawn_thread(&self, should_cull: bool, initial_task: Option<Box<dyn Task + Send>>) {
         let shared = self.shared.clone();
 
         std::thread::spawn(move || {
+            match initial_task {
+                Some(task) => task.run(),
+                None => {}
+            }
+
             loop {
                 let mut pool = shared.pool.lock().unwrap();
 
@@ -249,14 +254,11 @@ impl TaskPool {
     where
         T: Task + Send + 'static,
     {
-        self.shared.pool.lock().unwrap().push_back(Box::new(task));
-
         if self.shared.waiting_tasks.load(Ordering::Acquire) < MIN_THREADS {
-            self.spawn_thread(true);
+            self.spawn_thread(true, Some(Box::new(task)));
+        } else {
+            self.shared.pool.lock().unwrap().push_back(Box::new(task));
+            self.shared.condvar.notify_one();
         }
-
-        // FIXME potential race condition where thread is not yet waiting on the condvar. Support
-        // spawning threads with a task directly in the case there are 0 waiting
-        self.shared.condvar.notify_one();
     }
 }
