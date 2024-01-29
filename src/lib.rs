@@ -8,6 +8,7 @@ pub mod resolve;
 pub mod routing;
 pub mod systems;
 pub mod type_cache;
+pub mod connection;
 
 mod lazy;
 mod sequential_writer;
