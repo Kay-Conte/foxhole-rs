@@ -3,7 +3,7 @@ use foxhole::{
     framework::run,
     resolve::{Get, Resolve, ResolveGuard},
     routing::Route,
-    sys, Action, PathIter,
+    sys, Action, PathIter, connection::Http1,
 };
 
 struct Auth {
@@ -39,5 +39,5 @@ fn main() {
 
     println!("Try connecting on a browser at 'http://localhost:8080/page'");
 
-    run("127.0.0.1:5000", router)
+    run::<Http1>("127.0.0.1:5000", router)
 }

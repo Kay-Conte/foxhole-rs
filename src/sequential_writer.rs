@@ -11,7 +11,7 @@ pub enum State<W> {
 /// A synchronization type to order writes to a writer.
 pub struct SequentialWriter<W>
 where
-    W: Write + Send,
+    W: Write,
 {
     state: State<W>,
     next: Sender<W>,

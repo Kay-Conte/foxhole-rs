@@ -2,6 +2,7 @@ use std::sync::{Arc, RwLock};
 
 use foxhole::{
     action::Html,
+    connection::Http1,
     framework::run_with_cache,
     resolve::{Endpoint, Get, Query},
     sys,
@@ -38,5 +39,5 @@ fn main() {
 
     println!("Try connecting with a browser at 'http://localhost:8080'");
 
-    run_with_cache("0.0.0.0:8080", router, cache);
+    run_with_cache::<Http1>("0.0.0.0:8080", router, cache);
 }

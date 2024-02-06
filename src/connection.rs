@@ -1,5 +1,5 @@
 use std::{
-    io::{BufReader, ErrorKind, Write, Read},
+    io::{BufReader, ErrorKind, Read, Write},
     net::TcpStream,
     sync::mpsc::{Receiver, Sender},
     time::Duration,
@@ -9,13 +9,15 @@ use http::Request;
 
 use crate::{
     action::RawResponse,
+    get_as_slice::GetAsSlice,
     http_utils::{take_request, IntoRawBytes},
     lazy::Lazy,
     sequential_writer::{self, SequentialWriter},
 };
 
-pub trait Connection: Sized {
-    type Frame;
+pub trait Connection: Sized + Send {
+    type Body: 'static + GetAsSlice + Send;
+    type Responder: 'static + Responder;
 
     fn new(conn: TcpStream) -> Result<Self, std::io::Error>;
 
@@ -23,11 +25,13 @@ pub trait Connection: Sized {
 
     /// Reading of the body of the previous frame may occur on subsequent calls depending on
     /// implementation
-    fn next_frame(&mut self) -> Result<Self::Frame, std::io::Error>;
+    fn next_frame(&mut self) -> Result<(Request<Self::Body>, Self::Responder), std::io::Error>;
+}
 
-    fn write_bytes(&mut self, bytes: Vec<u8>) -> Result<(), std::io::Error>;
+pub trait Responder: Sized + Send {
+    fn write_bytes(self, bytes: Vec<u8>) -> Result<(), std::io::Error>;
 
-    fn respond(&mut self, response: impl Into<RawResponse>) -> Result<(), std::io::Error> {
+    fn respond(self, response: impl Into<RawResponse>) -> Result<(), std::io::Error> {
         let response: RawResponse = response.into();
 
         let bytes = response.into_raw_bytes();
@@ -68,7 +72,8 @@ impl Http1 {
 }
 
 impl Connection for Http1 {
-    type Frame = (Request<Lazy<Vec<u8>>>, SequentialWriter<TcpStream>);
+    type Body = Lazy<Vec<u8>>;
+    type Responder = SequentialWriter<TcpStream>;
 
     fn new(conn: TcpStream) -> Result<Self, std::io::Error> {
         Ok(Self {
@@ -82,7 +87,7 @@ impl Connection for Http1 {
         self.conn.set_read_timeout(timeout)
     }
 
-    fn next_frame(&mut self) -> Result<Self::Frame, std::io::Error> {
+    fn next_frame(&mut self) -> Result<(Request<Self::Body>, Self::Responder), std::io::Error> {
         if let Some((len, sender)) = self.unfinished.take() {
             let mut buf = vec![0; len];
 
@@ -111,8 +116,13 @@ impl Connection for Http1 {
 
         Ok((req.map(|_| lazy), self.next_writer()?))
     }
+}
 
-    fn write_bytes(&mut self, bytes: Vec<u8>) -> Result<(), std::io::Error> {
-        self.conn.write_all(&bytes)
+impl<W> Responder for SequentialWriter<W>
+where
+    W: Write + Send + Sync,
+{
+    fn write_bytes(self, bytes: Vec<u8>) -> Result<(), std::io::Error> {
+        self.send(&bytes)
     }
 }

@@ -1,6 +1,6 @@
 use foxhole::{
     resolve::{Endpoint, Get},
-    run, sys, IntoResponse, Response, Route,
+    run, sys, IntoResponse, Response, Route, connection::Http1,
 };
 
 // This is a reimplementation of the provided `Html` type.
@@ -35,5 +35,5 @@ fn main() {
 
     println!("Try connecting from a browser at 'http://localhost:8080/page'");
 
-    run("127.0.0.1:8080", router);
+    run::<Http1>("127.0.0.1:8080", router);
 }

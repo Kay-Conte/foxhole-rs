@@ -9,6 +9,7 @@ pub mod routing;
 pub mod systems;
 pub mod type_cache;
 pub mod connection;
+pub mod get_as_slice;
 
 mod lazy;
 mod sequential_writer;

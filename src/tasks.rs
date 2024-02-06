@@ -1,7 +1,7 @@
 use std::{
     collections::VecDeque,
-    io::{BufReader, Read},
     iter::Peekable,
+    marker::PhantomData,
     net::TcpStream,
     str::Split,
     sync::{
@@ -14,26 +14,25 @@ use std::{
 use http::Request;
 
 use crate::{
-    http_utils::{take_request, IntoRawBytes},
-    lazy::Lazy,
+    connection::{Connection, Responder},
+    get_as_slice::GetAsSlice,
     routing::Route,
-    sequential_writer::{self, SequentialWriter},
     type_cache::TypeCacheShared,
-    Action,
+    IntoResponse,
 };
 
 const MIN_THREADS: usize = 4;
 const TIMEOUT: u64 = 5;
 
-pub type PathIter<'a> = Peekable<Split<'a, &'static str>>;
+type BoxedBodyRequest = Request<Box<dyn 'static + GetAsSlice + Send>>;
 
-type RawData = Vec<u8>;
+pub type PathIter<'a> = Peekable<Split<'a, &'static str>>;
 
 pub trait Task {
     fn run(self: Box<Self>);
 }
 
-pub struct ConnectionTask {
+pub struct ConnectionTask<C> {
     pub task_pool: TaskPool,
 
     /// An application global type cache
@@ -43,70 +42,55 @@ pub struct ConnectionTask {
 
     /// A handle to the applications router tree
     pub router: Arc<Route>,
+
+    pub phantom_data: PhantomData<C>,
 }
 
-impl Task for ConnectionTask {
+impl<C> Task for ConnectionTask<C>
+where
+    C: Connection,
+{
     fn run(self: Box<Self>) {
-        self.stream
-            .set_read_timeout(Some(Duration::from_secs(TIMEOUT)))
-            .expect("Shouldn't fail unless duration is 0");
-
-        let Ok(writer) = self.stream.try_clone() else {
-            // Stream closed early
+        let Ok(mut connection) = C::new(self.stream) else {
             return;
         };
 
-        let mut writer = SequentialWriter::new(sequential_writer::State::Writer(writer));
+        connection
+            .set_read_timeout(Some(Duration::from_secs(TIMEOUT)))
+            .expect("Shouldn't fail unless duration is 0");
 
-        let mut reader = BufReader::new(self.stream);
+        while let Ok((request, responder)) = connection.next_frame() {
+            let r = request.map(|i| {
+                let b: Box<dyn 'static + GetAsSlice + Send> = Box::new(i);
 
-        while let Ok(req) = take_request(&mut reader) {
-            let (lazy, sender) = Lazy::new();
-
-            let body_len = req
-                .headers()
-                .get("content-length")
-                .and_then(|v| v.to_str().ok())
-                .and_then(|s| s.parse::<usize>().ok())
-                .unwrap_or(0);
+                b
+            });
 
             self.task_pool.send_task(RequestTask {
                 cache: self.cache.clone(),
-                request: req.map(|_| lazy),
-                writer: writer.0,
+                request: r,
+                responder,
                 router: self.router.clone(),
             });
-
-            let mut buf = vec![0; body_len];
-
-            if reader.read_exact(&mut buf).is_err() {
-                // Avoid blocking request tasks awaiting a body that doesn't exist.
-                let _ = sender.send(vec![]);
-
-                return;
-            };
-
-            // This will only error if the `Request` was already responded to before we finish
-            // reading the body.
-            let _ = sender.send(buf);
-
-            writer = SequentialWriter::new(sequential_writer::State::Waiting(writer.1));
         }
     }
 }
 
-pub struct RequestTask {
+pub struct RequestTask<R> {
     pub cache: TypeCacheShared,
 
-    pub request: Request<Lazy<RawData>>,
+    pub request: BoxedBodyRequest,
 
-    pub writer: SequentialWriter<TcpStream>,
+    pub responder: R,
 
     /// A handle to the applications router tree
     pub router: Arc<Route>,
 }
 
-impl Task for RequestTask {
+impl<R> Task for RequestTask<R>
+where
+    R: Responder,
+{
     fn run(self: Box<Self>) {
         let path = self.request.uri().path().to_owned();
 
@@ -124,7 +108,7 @@ impl Task for RequestTask {
         loop {
             for system in cursor.systems() {
                 if let Some(r) = system.call(&ctx, &mut path_iter) {
-                    self.writer.send(&r.into_raw_bytes()).unwrap();
+                    self.responder.respond(r).unwrap();
 
                     return;
                 }
@@ -141,13 +125,13 @@ impl Task for RequestTask {
             }
         }
 
-        let _ = self.writer.send(&404u16.action().unwrap().into_raw_bytes());
+        let _ = self.responder.respond(404u16.response());
     }
 }
 
 pub struct RequestState {
     pub global_cache: TypeCacheShared,
-    pub request: Request<Lazy<RawData>>,
+    pub request: BoxedBodyRequest,
 }
 
 struct Shared {

@@ -97,7 +97,6 @@ If a type returns `None` out of `MaybeIntoResponse` a response will not be sent 
 ```rust
 use foxhole::{http::Version, IntoResponse, Response};
 
-
 pub struct Html(pub String);
 
 impl IntoResponse for Html {

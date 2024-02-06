@@ -1,28 +1,30 @@
 //! This module provides the application entry point.
 
 use std::{
+    marker::PhantomData,
     net::{TcpListener, ToSocketAddrs},
     sync::{Arc, RwLock},
 };
 
 use crate::{
+    connection::Connection,
     routing::Route,
     tasks::{ConnectionTask, TaskPool},
     type_cache::TypeCache,
 };
 
 /// Application entry point. Call this to run your application.
-pub fn run<A>(address: A, router: Route)
+pub fn run<C>(address: impl ToSocketAddrs, router: Route)
 where
-    A: ToSocketAddrs,
+    C: 'static + Connection,
 {
-    run_with_cache(address, router, TypeCache::new())
+    run_with_cache::<C>(address, router, TypeCache::new())
 }
 
 /// Application entry point with an initialized cache.
-pub fn run_with_cache<A>(address: A, router: Route, type_cache: TypeCache)
+pub fn run_with_cache<C>(address: impl ToSocketAddrs, router: Route, type_cache: TypeCache)
 where
-    A: ToSocketAddrs,
+    C: 'static + Connection,
 {
     let incoming = TcpListener::bind(address).expect("Could not bind to local address");
 
@@ -36,11 +38,12 @@ where
             continue;
         };
 
-        let task = ConnectionTask {
+        let task = ConnectionTask::<C> {
             task_pool: task_pool.clone(),
             cache: type_cache.clone(),
             stream,
             router: router.clone(),
+            phantom_data: PhantomData,
         };
 
         task_pool.send_task(task);
