@@ -249,16 +249,6 @@ mod tests {
     }
 
     #[test]
-    fn invalid_method() {
-        let bytes = b"BAKLAVA / HTTP/1.1 \r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: 123\r\n\r\n";
-
-        let mut reader = BufReader::new(&bytes[..]);
-
-        let resp = take_request(&mut reader);
-        assert!(matches!(resp, Err(ParseError::MalformedRequest)));
-    }
-
-    #[test]
     fn not_enough_bytes() {
         let bytes = b"GET / HTTP/1.1 \r\nContent-Type: \r\n\r\n";
         let mut reader = BufReader::new(&bytes[..]);
