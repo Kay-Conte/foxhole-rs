@@ -110,6 +110,16 @@ impl<'a> Resolve<'a> for Endpoint {
     }
 }
 
+pub struct Url(pub Vec<String>);
+
+impl<'a> Resolve<'a> for Url {
+    type Output = Self;
+
+    fn resolve(_ctx: &'a RequestState, path_iter: &mut PathIter) -> ResolveGuard<Self::Output> {
+        ResolveGuard::Value(Url(path_iter.clone().map(|s| s.to_owned()).collect()))
+    }
+}
+
 /// Consumes the next part of the url `path_iter`. Note that this will happen on call to its
 /// `resolve` method so ordering of parameters matter. Place any necessary guards before this
 /// method.
