@@ -15,11 +15,38 @@ use crate::{
     sequential_writer::{self, SequentialWriter},
 };
 
+pub trait BoxedStreamMarker: Read + Write + BoxedTryClone + SetTimeout + Send + Sync {}
+
+impl<T> BoxedStreamMarker for T where T: Read + Write + BoxedTryClone + SetTimeout + Send + Sync {}
+
+type BoxedStream = Box<dyn BoxedStreamMarker>;
+
+pub trait SetTimeout {
+    fn set_timeout(&mut self, timeout: Option<Duration>) -> std::io::Result<()>;
+}
+
+impl SetTimeout for TcpStream {
+    fn set_timeout(&mut self, timeout: Option<Duration>) -> std::io::Result<()> {
+        self.set_read_timeout(timeout)?;
+        self.set_write_timeout(timeout)
+    }
+}
+
+pub trait BoxedTryClone {
+    fn try_clone(&self) -> std::io::Result<BoxedStream>;
+}
+
+impl BoxedTryClone for TcpStream {
+    fn try_clone(&self) -> std::io::Result<BoxedStream> {
+        self.try_clone().map(|s| Box::new(s) as BoxedStream)
+    }
+}
+
 pub trait Connection: Sized + Send {
     type Body: 'static + GetAsSlice + Send;
     type Responder: 'static + Responder;
 
-    fn new(conn: TcpStream) -> Result<Self, std::io::Error>;
+    fn new(conn: BoxedStream) -> Result<Self, std::io::Error>;
 
     fn set_read_timeout(&mut self, timeout: Option<Duration>) -> Result<(), std::io::Error>;
 
@@ -42,13 +69,13 @@ pub trait Responder: Sized + Send {
 
 /// HTTP 1.1
 pub struct Http1 {
-    conn: TcpStream,
-    next_writer: Option<Receiver<TcpStream>>,
+    conn: BoxedStream,
+    next_writer: Option<Receiver<BoxedStream>>,
     unfinished: Option<(usize, Sender<Vec<u8>>)>,
 }
 
 impl Http1 {
-    fn next_writer(&mut self) -> Result<SequentialWriter<TcpStream>, std::io::Error> {
+    fn next_writer(&mut self) -> Result<SequentialWriter<BoxedStream>, std::io::Error> {
         Ok(match self.next_writer.take() {
             Some(writer) => {
                 let (writer, receiver) =
@@ -73,9 +100,9 @@ impl Http1 {
 
 impl Connection for Http1 {
     type Body = Lazy<Vec<u8>>;
-    type Responder = SequentialWriter<TcpStream>;
+    type Responder = SequentialWriter<BoxedStream>;
 
-    fn new(conn: TcpStream) -> Result<Self, std::io::Error> {
+    fn new(conn: BoxedStream) -> Result<Self, std::io::Error> {
         Ok(Self {
             conn,
             next_writer: None,
@@ -84,7 +111,7 @@ impl Connection for Http1 {
     }
 
     fn set_read_timeout(&mut self, timeout: Option<Duration>) -> Result<(), std::io::Error> {
-        self.conn.set_read_timeout(timeout)
+        self.conn.set_timeout(timeout)
     }
 
     fn next_frame(&mut self) -> Result<(Request<Self::Body>, Self::Responder), std::io::Error> {

@@ -51,7 +51,7 @@ where
     C: Connection,
 {
     fn run(self: Box<Self>) {
-        let Ok(mut connection) = C::new(self.stream) else {
+        let Ok(mut connection) = C::new(Box::new(self.stream)) else {
             return;
         };
 
