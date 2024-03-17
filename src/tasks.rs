@@ -1,22 +1,25 @@
 use std::{
     collections::VecDeque,
+    io::Read,
     iter::Peekable,
     marker::PhantomData,
     net::TcpStream,
     str::Split,
     sync::{
         atomic::{AtomicUsize, Ordering},
-        Arc, Condvar, Mutex,
+        Arc, Condvar, Mutex, RwLock,
     },
     time::Duration,
 };
 
 use http::Request;
+use rustls::{ServerConfig, ServerConnection};
 
 use crate::{
     connection::{Connection, Responder},
     get_as_slice::GetAsSlice,
     routing::Route,
+    tls_connection::TlsConnection,
     type_cache::TypeCacheShared,
     IntoResponse,
 };
@@ -52,6 +55,61 @@ where
 {
     fn run(self: Box<Self>) {
         let Ok(mut connection) = C::new(Box::new(self.stream)) else {
+            return;
+        };
+
+        connection
+            .set_read_timeout(Some(Duration::from_secs(TIMEOUT)))
+            .expect("Shouldn't fail unless duration is 0");
+
+        while let Ok((request, responder)) = connection.next_frame() {
+            let r = request.map(|i| {
+                let b: Box<dyn 'static + GetAsSlice + Send> = Box::new(i);
+
+                b
+            });
+
+            self.task_pool.send_task(RequestTask {
+                cache: self.cache.clone(),
+                request: r,
+                responder,
+                router: self.router.clone(),
+            });
+        }
+    }
+}
+
+pub struct SecuredConnectionTask<C> {
+    pub task_pool: TaskPool,
+
+    pub cache: TypeCacheShared,
+
+    pub stream: TcpStream,
+
+    pub router: Arc<Route>,
+
+    pub tls_config: Arc<ServerConfig>,
+
+    pub phantom_date: PhantomData<C>,
+}
+
+impl<C> Task for SecuredConnectionTask<C>
+where
+    C: Connection,
+{
+    fn run(mut self: Box<Self>) {
+        let Ok(mut connection) = ServerConnection::new(self.tls_config.clone()) else {
+            return;
+        };
+
+        let Ok(_) = connection.complete_io(&mut self.stream) else {
+            return;
+        };
+
+        let Ok(mut connection) = C::new(Box::new(TlsConnection::new(
+            self.stream,
+            Arc::new(RwLock::new(connection)),
+        ))) else {
             return;
         };
 

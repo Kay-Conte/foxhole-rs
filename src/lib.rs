@@ -14,6 +14,7 @@ pub mod get_as_slice;
 mod lazy;
 mod sequential_writer;
 mod tasks;
+mod tls_connection;
 
 pub use tasks::PathIter;
 

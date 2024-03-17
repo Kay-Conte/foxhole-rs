@@ -13,6 +13,7 @@ use crate::{
     http_utils::{take_request, IntoRawBytes},
     lazy::Lazy,
     sequential_writer::{self, SequentialWriter},
+    tls_connection::TlsConnection,
 };
 
 pub trait BoxedStreamMarker: Read + Write + BoxedTryClone + SetTimeout + Send + Sync {}
@@ -32,6 +33,13 @@ impl SetTimeout for TcpStream {
     }
 }
 
+impl SetTimeout for TlsConnection {
+    fn set_timeout(&mut self, timeout: Option<Duration>) -> std::io::Result<()> {
+        self.stream.set_read_timeout(timeout)?;
+        self.stream.set_write_timeout(timeout)
+    }
+}
+
 pub trait BoxedTryClone {
     fn try_clone(&self) -> std::io::Result<BoxedStream>;
 }
@@ -39,6 +47,14 @@ pub trait BoxedTryClone {
 impl BoxedTryClone for TcpStream {
     fn try_clone(&self) -> std::io::Result<BoxedStream> {
         self.try_clone().map(|s| Box::new(s) as BoxedStream)
+    }
+}
+
+impl BoxedTryClone for TlsConnection {
+    fn try_clone(&self) -> std::io::Result<BoxedStream> {
+        self.stream
+            .try_clone()
+            .map(|s| Box::new(TlsConnection::new(s, self.conn.clone())) as BoxedStream)
     }
 }
 

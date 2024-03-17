@@ -10,3 +10,4 @@ rust-version = "1.65.0"
 
 [dependencies]
 http = "0.2.9"
+rustls = "0.23.2"
