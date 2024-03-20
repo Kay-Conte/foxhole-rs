@@ -1,28 +1,34 @@
 use std::{
     collections::VecDeque,
-    io::Read,
     iter::Peekable,
     marker::PhantomData,
     net::TcpStream,
     str::Split,
     sync::{
         atomic::{AtomicUsize, Ordering},
-        Arc, Condvar, Mutex, RwLock,
+        Arc, Condvar, Mutex,
     },
     time::Duration,
 };
 
 use http::Request;
-use rustls::{ServerConfig, ServerConnection};
 
 use crate::{
     connection::{Connection, Responder},
     get_as_slice::GetAsSlice,
     routing::Route,
-    tls_connection::TlsConnection,
     type_cache::TypeCacheShared,
     IntoResponse,
 };
+
+#[cfg(feature = "tls")]
+use std::sync::RwLock;
+
+#[cfg(feature = "tls")]
+use rustls::{ServerConfig, ServerConnection};
+
+#[cfg(feature = "tls")]
+use crate::tls_connection::TlsConnection;
 
 const MIN_THREADS: usize = 4;
 const TIMEOUT: u64 = 5;
@@ -79,6 +85,7 @@ where
     }
 }
 
+#[cfg(feature = "tls")]
 pub struct SecuredConnectionTask<C> {
     pub task_pool: TaskPool,
 
@@ -90,20 +97,26 @@ pub struct SecuredConnectionTask<C> {
 
     pub tls_config: Arc<ServerConfig>,
 
-    pub phantom_date: PhantomData<C>,
+    pub phantom_data: PhantomData<C>,
 }
 
+#[cfg(feature = "tls")]
 impl<C> Task for SecuredConnectionTask<C>
 where
     C: Connection,
 {
     fn run(mut self: Box<Self>) {
         let Ok(mut connection) = ServerConnection::new(self.tls_config.clone()) else {
+            println!("Err");
             return;
         };
 
-        let Ok(_) = connection.complete_io(&mut self.stream) else {
-            return;
+        match connection.complete_io(&mut self.stream) {
+            Ok(_) => {}
+            Err(e) => {
+                println!("{}", e);
+                return;
+            }
         };
 
         let Ok(mut connection) = C::new(Box::new(TlsConnection::new(

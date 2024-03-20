@@ -8,6 +8,13 @@ repository = "https://github.com/Kay-Conte/foxhole-rs/"
 categories = ["web-programming::http-server", "web-programming"]
 rust-version = "1.65.0"
 
+[features]
+tls = []
+
 [dependencies]
 http = "0.2.9"
 rustls = "0.23.2"
+
+[dev-dependencies]
+rustls-pemfile = "2"
+log = "0.4.21"
