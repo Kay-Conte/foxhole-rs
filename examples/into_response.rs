@@ -1,16 +1,17 @@
 use foxhole::{
+    connection::Http1,
     resolve::{Endpoint, Get},
-    run, sys, IntoResponse, Response, Route, connection::Http1,
+    run, sys, IntoResponse, Scope, routing::Router,
 };
 
 // This is a reimplementation of the provided `Html` type.
 struct Html(String);
 
 impl IntoResponse for Html {
-    fn response(self) -> Response<Vec<u8>> {
+    fn response(self) -> http::Response<Vec<u8>> {
         let bytes = self.0.into_bytes();
 
-        Response::builder()
+        http::Response::builder()
             .status(200)
             .header("Content-Type", "text/html; charset=utf-8")
             .header("Content-Length", format!("{}", bytes.len()))
@@ -29,11 +30,11 @@ fn favicon(_get: Get, _e: Endpoint) -> u16 {
 }
 
 fn main() {
-    let router = Route::empty()
+    let scope = Scope::empty()
         .route("favicon.ico", sys![favicon])
         .route("page", sys![page]);
 
     println!("Try connecting from a browser at 'http://localhost:8080/page'");
 
-    run::<Http1>("127.0.0.1:8080", router);
+    run::<Http1>("127.0.0.1:8080", Router::new(scope));
 }

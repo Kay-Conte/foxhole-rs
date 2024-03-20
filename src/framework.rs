@@ -12,13 +12,13 @@ mod framework {
 
     use crate::{
         connection::Connection,
-        routing::Route,
+        routing::Router,
         tasks::{ConnectionTask, TaskPool},
         type_cache::TypeCache,
     };
 
     /// Application entry point. Call this to run your application.
-    pub fn run<C>(address: impl ToSocketAddrs, router: Route)
+    pub fn run<C>(address: impl ToSocketAddrs, router: Router)
     where
         C: 'static + Connection,
     {
@@ -26,7 +26,7 @@ mod framework {
     }
 
     /// Application entry point with an initialized cache.
-    pub fn run_with_cache<C>(address: impl ToSocketAddrs, router: Route, type_cache: TypeCache)
+    pub fn run_with_cache<C>(address: impl ToSocketAddrs, router: Router, type_cache: TypeCache)
     where
         C: 'static + Connection,
     {
@@ -67,13 +67,13 @@ mod framework {
 
     use crate::{
         connection::Connection,
-        routing::Route,
+        routing::Scope,
         tasks::{SecuredConnectionTask, TaskPool},
         type_cache::TypeCache,
     };
 
     /// Application entry point. Call this to run your application.
-    pub fn run<C>(address: impl ToSocketAddrs, router: Route, tls_config: ServerConfig)
+    pub fn run<C>(address: impl ToSocketAddrs, router: Scope, tls_config: ServerConfig)
     where
         C: 'static + Connection,
     {
@@ -81,8 +81,12 @@ mod framework {
     }
 
     /// Application entry point with an initialized cache.
-    pub fn run_with_cache<C>(address: impl ToSocketAddrs, router: Route, type_cache: TypeCache, tls_config: ServerConfig)
-    where
+    pub fn run_with_cache<C>(
+        address: impl ToSocketAddrs,
+        router: Scope,
+        type_cache: TypeCache,
+        tls_config: ServerConfig,
+    ) where
         C: 'static + Connection,
     {
         let incoming = TcpListener::bind(address).expect("Could not bind to local address");

@@ -2,7 +2,7 @@ use foxhole::{
     connection::Http1,
     http_utils::IntoRawBytes,
     resolve::{Endpoint, Get, UrlCollect, UrlPart},
-    run, sys, IntoResponse, Response, Route,
+    run, sys, IntoResponse, Scope, routing::Router,
 };
 
 pub struct User(String);
@@ -11,7 +11,7 @@ impl IntoResponse for User {
     fn response(self) -> foxhole::action::RawResponse {
         let bytes = self.0.into_raw_bytes();
 
-        Response::builder()
+        http::Response::builder()
             .status(200)
             .header("Content-Type", "text/html")
             .header("Content-Length", format!("{}", bytes.len()))
@@ -31,11 +31,11 @@ fn collect(_g: Get, collect: UrlCollect) -> Option<User> {
 }
 
 fn main() {
-    let router = Route::empty()
+    let scope = Scope::empty()
         .route("user", sys![user])
         .route("chained", sys![collect]);
 
     println!("Try connecting on a browser at 'http://localhost:8080/user/USERNAME'");
 
-    run::<Http1>("0.0.0.0:8080", router);
+    run::<Http1>("0.0.0.0:8080", Router::new(scope));
 }

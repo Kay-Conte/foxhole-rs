@@ -10,8 +10,8 @@ pub trait IntoResponse {
     fn response(self) -> RawResponse;
 }
 
-/// All `System`s must return a type implementing `MaybeIntoResponse`. This trait dictates the
-/// expected behaviour of the underlying router. If this method returns `None` the router will
+/// All `System`s must return a type implementing `Action`. This trait decides the
+/// behaviour of the underlying router. If this method returns `None` the router will
 /// continue. If it receives `Some` value, it will respond to the connection and stop routing.
 pub trait Action {
     fn action(self) -> Option<RawResponse>;

@@ -7,7 +7,7 @@ use foxhole::{
     resolve::{Endpoint, Get, Query},
     sys,
     type_cache::{TypeCache, TypeCacheKey},
-    Route,
+    Scope, routing::Router,
 };
 
 pub struct Counter(u32);
@@ -31,7 +31,7 @@ fn get(_get: Get, counter: Query<Counter>, _e: Endpoint) -> Html {
 }
 
 fn main() {
-    let router = Route::new(sys![get]);
+    let scope = Scope::new(sys![get]);
 
     let mut cache = TypeCache::new();
 
@@ -39,5 +39,5 @@ fn main() {
 
     println!("Try connecting with a browser at 'http://localhost:8080'");
 
-    run_with_cache::<Http1>("0.0.0.0:8080", router, cache);
+    run_with_cache::<Http1>("0.0.0.0:8080", Router::new(scope), cache);
 }

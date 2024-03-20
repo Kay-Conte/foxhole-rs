@@ -43,6 +43,7 @@ fn get(_get: Get) -> Html {
 fn main() {
     let router = Route::new(sys![get]);
 
+    // Just so tests dont run infinitely. For whatever reason `not(test)` runs anyways
     #[cfg(test)]
     run::<Http1>("127.0.0.1:8080", router);
 } 
@@ -91,11 +92,11 @@ impl<'a> Resolve<'a> for Get {
 
 ## Return types
 
-Systems are required to return a value that implements `MaybeIntoResponse`. 
+Systems are required to return a value that implements `Action`. 
 
 Additionally note the existence of `IntoResponse` which can be implemented instead for types that always respond.
 
-If a type returns `None` out of `MaybeIntoResponse` a response will not be sent and routing will continue to further nodes. This will likely become an extended enum on websocket support.
+If a type returns `None` out of `Action` a response will not be sent and routing will continue to further nodes. This will likely become an extended enum on websocket support.
 
 ### Example
 ```rust

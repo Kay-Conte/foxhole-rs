@@ -16,7 +16,8 @@ use http::Request;
 use crate::{
     connection::{Connection, Responder},
     get_as_slice::GetAsSlice,
-    routing::Route,
+    layers::Layer,
+    routing::Router,
     type_cache::TypeCacheShared,
     IntoResponse,
 };
@@ -33,15 +34,19 @@ use crate::tls_connection::TlsConnection;
 const MIN_THREADS: usize = 4;
 const TIMEOUT: u64 = 5;
 
-type BoxedBodyRequest = Request<Box<dyn 'static + GetAsSlice + Send>>;
+/// Request with a boxed body implementing `GetAsSlice` This is the standard request type
+/// throughout the library
+pub type BoxedBodyRequest = Request<Box<dyn 'static + GetAsSlice + Send>>;
 
+/// The url iterator type used by the library. This can be found in `RequestState` accessed via the
+/// `Resolve` trait
 pub type PathIter<'a> = Peekable<Split<'a, &'static str>>;
 
-pub trait Task {
+pub(crate) trait Task {
     fn run(self: Box<Self>);
 }
 
-pub struct ConnectionTask<C> {
+pub(crate) struct ConnectionTask<C> {
     pub task_pool: TaskPool,
 
     /// An application global type cache
@@ -50,7 +55,7 @@ pub struct ConnectionTask<C> {
     pub stream: TcpStream,
 
     /// A handle to the applications router tree
-    pub router: Arc<Route>,
+    pub router: Arc<Router>,
 
     pub phantom_data: PhantomData<C>,
 }
@@ -86,14 +91,14 @@ where
 }
 
 #[cfg(feature = "tls")]
-pub struct SecuredConnectionTask<C> {
+pub(crate) struct SecuredConnectionTask<C> {
     pub task_pool: TaskPool,
 
     pub cache: TypeCacheShared,
 
     pub stream: TcpStream,
 
-    pub router: Arc<Route>,
+    pub router: Arc<Scope>,
 
     pub tls_config: Arc<ServerConfig>,
 
@@ -147,7 +152,7 @@ where
     }
 }
 
-pub struct RequestTask<R> {
+pub(crate) struct RequestTask<R> {
     pub cache: TypeCacheShared,
 
     pub request: BoxedBodyRequest,
@@ -155,7 +160,7 @@ pub struct RequestTask<R> {
     pub responder: R,
 
     /// A handle to the applications router tree
-    pub router: Arc<Route>,
+    pub router: Arc<Router>,
 }
 
 impl<R> Task for RequestTask<R>
@@ -169,16 +174,20 @@ where
 
         path_iter.next();
 
-        let ctx = RequestState {
+        let mut ctx = RequestState {
             global_cache: self.cache.clone(),
             request: self.request,
         };
 
-        let mut cursor = self.router.as_ref();
+        self.router.request_layer().execute(&mut ctx.request);
+
+        let mut cursor = self.router.scope();
 
         loop {
             for system in cursor.systems() {
-                if let Some(r) = system.call(&ctx, &mut path_iter) {
+                if let Some(mut r) = system.call(&ctx, &mut path_iter) {
+                    self.router.response_layer().execute(&mut r);
+
                     self.responder.respond(r).unwrap();
 
                     return;
@@ -200,6 +209,7 @@ where
     }
 }
 
+/// Holds the state of the request handling. This can be accessed via the `Resolve` trait.
 pub struct RequestState {
     pub global_cache: TypeCacheShared,
     pub request: BoxedBodyRequest,
@@ -227,7 +237,7 @@ impl Shared {
 }
 
 #[derive(Clone)]
-pub struct TaskPool {
+pub(crate) struct TaskPool {
     shared: Arc<Shared>,
 }
 

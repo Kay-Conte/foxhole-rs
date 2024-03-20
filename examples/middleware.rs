@@ -2,7 +2,7 @@ use foxhole::{
     action::Html,
     framework::run,
     resolve::{Get, Resolve, ResolveGuard},
-    routing::Route,
+    routing::{Scope, Router},
     sys, Action, PathIter, connection::Http1,
 };
 
@@ -35,9 +35,9 @@ fn get_page(_get: Get) -> Html {
 
 fn main() {
     // ! systems are run from left to right until a response is received from a system
-    let router = Route::new(sys![middleware]).route("page", sys![get_page]);
+    let scope = Scope::new(sys![middleware]).route("page", sys![get_page]);
 
     println!("Try connecting on a browser at 'http://localhost:8080/page'");
 
-    run::<Http1>("127.0.0.1:5000", router)
+    run::<Http1>("127.0.0.1:5000", Router::new(scope))
 }
