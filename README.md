@@ -34,18 +34,18 @@ Foxhole is a simple, fast, synchronous framework built for finishing your projec
 Foxhole uses a set of handler systems and routing modules to handle requests and responses.   
 Here's a starting example of a Hello World server.
 ```rust
-use foxhole::{connection::Http1, resolve::Get, action::Html, run, sys, Route};
+use foxhole::{connection::Http1, resolve::Get, action::Html, run, sys, Scope};
 
 fn get(_get: Get) -> Html {
     Html("<h1> Foxhole </h1>".to_string())
 }
 
 fn main() {
-    let router = Route::new(sys![get]);
+    let scope = Scope::new(sys![get]);
 
     // Just so tests dont run infinitely. For whatever reason `not(test)` runs anyways
     #[cfg(test)]
-    run::<Http1>("127.0.0.1:8080", router);
+    run::<Http1>("127.0.0.1:8080", Router::builder(scope));
 } 
 ```
 
@@ -55,7 +55,7 @@ Let's break this down into its components.
 
 The router will step through the url by its parts, first starting with the route. It will try to run **all** systems of every node it steps through in order. Once a response is received it will stop stepping over the url and respond immediately. 
 
-lets assume we have the router `Route::new(sys![auth]).route("page", Route::new(sys![get_page]))` and the request `/page`
+lets assume we have the router `Scope::new(sys![auth]).route("page", sys![get_page])` and the request `/page`
 
 In this example, the router will first call `auth` if auth returns a response, say the user is not authorized and we would like to respond early, then we stop there and respond `401`. Otherwise we continue to the next node `get_page`
 
@@ -105,10 +105,10 @@ use foxhole::{http::Version, IntoResponse, Response};
 pub struct Html(pub String);
 
 impl IntoResponse for Html {
-    fn response(self) -> Response<Vec<u8>> {
+    fn response(self) -> Response {
         let bytes = self.0.into_bytes();
 
-        Response::builder()
+        http::Response::builder()
             .version(Version::HTTP_11)
             .status(200)
             .header("Content-Type", "text/html; charset=utf-8")
