@@ -97,7 +97,7 @@ pub(crate) struct SecuredConnectionTask<C> {
 
     pub stream: TcpStream,
 
-    pub router: Arc<Scope>,
+    pub router: Arc<Router>,
 
     pub tls_config: Arc<ServerConfig>,
 

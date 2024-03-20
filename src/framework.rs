@@ -67,13 +67,13 @@ mod framework {
 
     use crate::{
         connection::Connection,
-        routing::Scope,
+        routing::Router,
         tasks::{SecuredConnectionTask, TaskPool},
         type_cache::TypeCache,
     };
 
     /// Application entry point. Call this to run your application.
-    pub fn run<C>(address: impl ToSocketAddrs, router: Scope, tls_config: ServerConfig)
+    pub fn run<C>(address: impl ToSocketAddrs, router: Router, tls_config: ServerConfig)
     where
         C: 'static + Connection,
     {
@@ -83,7 +83,7 @@ mod framework {
     /// Application entry point with an initialized cache.
     pub fn run_with_cache<C>(
         address: impl ToSocketAddrs,
-        router: Scope,
+        router: Router,
         type_cache: TypeCache,
         tls_config: ServerConfig,
     ) where
