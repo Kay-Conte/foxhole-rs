@@ -36,5 +36,5 @@ fn main() {
 
     println!("Try connecting from a browser at 'http://localhost:8080/page'");
 
-    run::<Http1>("127.0.0.1:8080", Router::new(scope));
+    run::<Http1>("127.0.0.1:8080", Router::builder(scope));
 }

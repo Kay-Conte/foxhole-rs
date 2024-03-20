@@ -178,14 +178,14 @@ where
             request: self.request,
         };
 
-        self.router.request_layer().execute(&mut ctx.request);
+        self.router.get_request_layer().execute(&mut ctx.request);
 
         let mut cursor = self.router.scope();
 
         loop {
             for system in cursor.systems() {
                 if let Some(mut r) = system.call(&ctx, &mut path_iter) {
-                    self.router.response_layer().execute(&mut r);
+                    self.router.get_response_layer().execute(&mut r);
 
                     self.responder.respond(r).unwrap();
 

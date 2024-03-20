@@ -39,5 +39,5 @@ fn main() {
 
     println!("Try connecting with a browser at 'http://localhost:8080'");
 
-    run_with_cache::<Http1>("0.0.0.0:8080", Router::new(scope), cache);
+    run_with_cache::<Http1>("0.0.0.0:8080", Router::builder(scope), cache);
 }

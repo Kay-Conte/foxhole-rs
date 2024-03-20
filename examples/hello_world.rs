@@ -9,5 +9,5 @@ fn main() {
 
     println!("Running on '127.0.0.1:8080'");
 
-    run::<Http1>("127.0.0.1:8080", Router::new(scope));
+    run::<Http1>("127.0.0.1:8080", Router::builder(scope));
 }

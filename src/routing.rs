@@ -1,10 +1,6 @@
 use std::collections::HashMap;
 
-use crate::{
-    layers::{Layer, LayerGroup},
-    systems::DynSystem,
-    Request, Response,
-};
+use crate::{layers::Layer, systems::DynSystem, Request, Response};
 
 pub struct Router {
     root: Scope,
@@ -13,35 +9,33 @@ pub struct Router {
 }
 
 impl Router {
-    pub fn new(root: impl Into<Scope>) -> Self {
+    pub fn builder(root: impl Into<Scope>) -> Self {
         Router {
             root: root.into(),
-            request_layer: Box::new(LayerGroup::new()),
-            response_layer: Box::new(LayerGroup::new()),
+            request_layer: Box::new(()),
+            response_layer: Box::new(()),
         }
     }
 
-    pub fn with_layers(
-        root: impl Into<Scope>,
-        request_layer: impl 'static + Layer<Request> + Send + Sync,
-        response_layer: impl 'static + Layer<Response> + Send + Sync,
-    ) -> Self {
-        Self {
-            root: root.into(),
-            request_layer: Box::new(request_layer),
-            response_layer: Box::new(response_layer),
-        }
+    pub fn request_layer(mut self, layer: impl 'static + Layer<Request> + Send + Sync) -> Self {
+        self.request_layer = Box::new(layer);
+        self
+    }
+
+    pub fn response_layer(mut self, layer: impl 'static + Layer<Response> + Send + Sync) -> Self {
+        self.response_layer = Box::new(layer);
+        self
     }
 
     pub fn scope(&self) -> &Scope {
         &self.root
     }
 
-    pub fn request_layer(&self) -> &dyn Layer<Request> {
+    pub fn get_request_layer(&self) -> &dyn Layer<Request> {
         self.request_layer.as_ref()
     }
 
-    pub fn response_layer(&self) -> &dyn Layer<Response> {
+    pub fn get_response_layer(&self) -> &dyn Layer<Response> {
         self.response_layer.as_ref()
     }
 }

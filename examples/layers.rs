@@ -28,8 +28,10 @@ fn main() {
 
     println!("Running on '127.0.0.1:8080'");
 
-    run::<Http1>("127.0.0.1:8080", Router::with_layers(scope, Logger, Logger));
-
-    // You can ellide one of the layers by using a unit type `()`
-    // run::<Http1>("127.0.0.1:8080", Router::with_layers(scope, (), ()));
+    run::<Http1>(
+        "127.0.0.1:8080",
+        Router::builder(scope)
+            .request_layer(Logger)
+            .response_layer(Logger),
+    );
 }
