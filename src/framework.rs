@@ -1,48 +1,114 @@
 //! This module provides the application entry point.
 
-use std::{
-    net::{TcpListener, ToSocketAddrs},
-    sync::{Arc, RwLock},
-};
+pub use framework::*;
 
-use crate::{
-    routing::Route,
-    tasks::{ConnectionTask, TaskPool},
-    type_cache::TypeCache,
-};
+#[cfg(not(feature = "tls"))]
+mod framework {
+    use std::{
+        marker::PhantomData,
+        net::{TcpListener, ToSocketAddrs},
+        sync::{Arc, RwLock},
+    };
 
-/// Application entry point. Call this to run your application.
-pub fn run<A>(address: A, router: Route)
-where
-    A: ToSocketAddrs,
-{
-    run_with_cache(address, router, TypeCache::new())
+    use crate::{
+        connection::Connection,
+        routing::Route,
+        tasks::{ConnectionTask, TaskPool},
+        type_cache::TypeCache,
+    };
+
+    /// Application entry point. Call this to run your application.
+    pub fn run<C>(address: impl ToSocketAddrs, router: Route)
+    where
+        C: 'static + Connection,
+    {
+        run_with_cache::<C>(address, router, TypeCache::new())
+    }
+
+    /// Application entry point with an initialized cache.
+    pub fn run_with_cache<C>(address: impl ToSocketAddrs, router: Route, type_cache: TypeCache)
+    where
+        C: 'static + Connection,
+    {
+        let incoming = TcpListener::bind(address).expect("Could not bind to local address");
+
+        let router = Arc::new(router);
+        let type_cache = Arc::new(RwLock::new(type_cache));
+
+        let task_pool = TaskPool::new();
+
+        loop {
+            let Ok((stream, _addr)) = incoming.accept() else {
+                continue;
+            };
+
+            let task = ConnectionTask::<C> {
+                task_pool: task_pool.clone(),
+                cache: type_cache.clone(),
+                stream,
+                router: router.clone(),
+                phantom_data: PhantomData,
+            };
+
+            task_pool.send_task(task);
+        }
+    }
 }
 
-/// Application entry point with an initialized cache.
-pub fn run_with_cache<A>(address: A, router: Route, type_cache: TypeCache)
-where
-    A: ToSocketAddrs,
-{
-    let incoming = TcpListener::bind(address).expect("Could not bind to local address");
+#[cfg(feature = "tls")]
+mod framework {
+    use std::{
+        marker::PhantomData,
+        net::{TcpListener, ToSocketAddrs},
+        sync::{Arc, RwLock},
+    };
 
-    let router = Arc::new(router);
-    let type_cache = Arc::new(RwLock::new(type_cache));
+    use rustls::ServerConfig;
 
-    let task_pool = TaskPool::new();
+    use crate::{
+        connection::Connection,
+        routing::Route,
+        tasks::{SecuredConnectionTask, TaskPool},
+        type_cache::TypeCache,
+    };
 
-    loop {
-        let Ok((stream, _addr)) = incoming.accept() else {
-            continue;
-        };
+    /// Application entry point. Call this to run your application.
+    pub fn run<C>(address: impl ToSocketAddrs, router: Route, tls_config: ServerConfig)
+    where
+        C: 'static + Connection,
+    {
+        run_with_cache::<C>(address, router, TypeCache::new(), tls_config)
+    }
 
-        let task = ConnectionTask {
-            task_pool: task_pool.clone(),
-            cache: type_cache.clone(),
-            stream,
-            router: router.clone(),
-        };
+    /// Application entry point with an initialized cache.
+    pub fn run_with_cache<C>(address: impl ToSocketAddrs, router: Route, type_cache: TypeCache, tls_config: ServerConfig)
+    where
+        C: 'static + Connection,
+    {
+        let incoming = TcpListener::bind(address).expect("Could not bind to local address");
 
-        task_pool.send_task(task);
+        let router = Arc::new(router);
+        let type_cache = Arc::new(RwLock::new(type_cache));
+
+        let task_pool = TaskPool::new();
+
+        let tls_config = Arc::new(tls_config);
+
+        loop {
+            let Ok((stream, _addr)) = incoming.accept() else {
+                continue;
+            };
+
+            let task = SecuredConnectionTask::<C> {
+                task_pool: task_pool.clone(),
+                cache: type_cache.clone(),
+                stream,
+                router: router.clone(),
+                tls_config: tls_config.clone(),
+                phantom_data: PhantomData,
+            };
+
+            task_pool.send_task(task);
+        }
     }
 }

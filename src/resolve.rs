@@ -110,6 +110,16 @@ impl<'a> Resolve<'a> for Endpoint {
     }
 }
 
+pub struct Url(pub Vec<String>);
+
+impl<'a> Resolve<'a> for Url {
+    type Output = Self;
+
+    fn resolve(_ctx: &'a RequestState, path_iter: &mut PathIter) -> ResolveGuard<Self::Output> {
+        ResolveGuard::Value(Url(path_iter.clone().map(|s| s.to_owned()).collect()))
+    }
+}
+
 /// Consumes the next part of the url `path_iter`. Note that this will happen on call to its
 /// `resolve` method so ordering of parameters matter. Place any necessary guards before this
 /// method.
@@ -142,11 +152,11 @@ impl<'a> Resolve<'a> for UrlCollect {
     }
 }
 
-impl<'a, 'b> Resolve<'a> for &'b Vec<u8> {
-    type Output = &'a Vec<u8>;
+impl<'a, 'b> Resolve<'a> for &'b [u8] {
+    type Output = &'a [u8];
 
     fn resolve(ctx: &'a RequestState, _path_iter: &mut PathIter) -> ResolveGuard<Self::Output> {
-        ResolveGuard::Value(ctx.request.body().get())
+        ResolveGuard::Value(ctx.request.body().get_as_slice())
     }
 }
 
@@ -154,6 +164,8 @@ impl<'a, 'b> Resolve<'a> for &'b str {
     type Output = &'a str;
 
     fn resolve(ctx: &'a RequestState, _path_iter: &mut PathIter) -> ResolveGuard<Self::Output> {
-        std::str::from_utf8(ctx.request.body().get()).ok().into()
+        std::str::from_utf8(ctx.request.body().get_as_slice())
+            .ok()
+            .into()
     }
 }

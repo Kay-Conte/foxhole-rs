@@ -1,4 +1,5 @@
 use foxhole::{
+    connection::Http1,
     http_utils::IntoRawBytes,
     resolve::{Endpoint, Get, UrlCollect, UrlPart},
     run, sys, IntoResponse, Response, Route,
@@ -36,5 +37,5 @@ fn main() {
 
     println!("Try connecting on a browser at 'http://localhost:8080/user/USERNAME'");
 
-    run("0.0.0.0:8080", router);
+    run::<Http1>("0.0.0.0:8080", router);
 }

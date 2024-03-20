@@ -1,8 +1,9 @@
 # [unreleased]
 
 ### Added
+- Http1 connection handler
 - Various new `Resolve` and `Response` types
-  - `&Vec<u8>` is now resolve, representing the raw body of the request 
+  - `&[u8]` is now resolve, representing the raw body of the request 
   - `&str` is now resolve, representing the str representation of the request
   - `Raw` a response with the `application/x-binary` content type hint
   - `Css` a response with the `text/css` content type hint
@@ -11,6 +12,7 @@
 ### Changed
 - Renamed `MaybeIntoResponse` to `Action`
 - Refactored various items into modules `resolve` and `action` exports to related items have changed
+- `run` and `run_with_cache` now take a generic implementing `Connection` used as the tcpstream handler.
 
 # [0.3.0]
 
