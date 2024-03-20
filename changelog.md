@@ -1,6 +1,7 @@
 # [unreleased]
 
 ### Added
+- `Layer` trait and `LayerGroup` structure.
 - Https/Tls support under feature flag 'tls'
 - Http1 connection handler
 - Various new `Resolve` and `Response` types

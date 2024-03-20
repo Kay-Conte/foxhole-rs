@@ -16,7 +16,6 @@ use http::Request;
 use crate::{
     connection::{Connection, Responder},
     get_as_slice::GetAsSlice,
-    layers::Layer,
     routing::Router,
     type_cache::TypeCacheShared,
     IntoResponse,
