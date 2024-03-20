@@ -1,5 +1,5 @@
 use foxhole::{
-    action::Html, connection::Http1, layers::Layer, resolve::Get, routing::Router, run, sys,
+    action::Html, connection::Http1, layers::Layer, resolve::Get, run, App
     Request, Response, Scope,
 };
 
@@ -28,10 +28,8 @@ fn main() {
 
     println!("Running on '127.0.0.1:8080'");
 
-    run::<Http1>(
-        "127.0.0.1:8080",
-        Router::builder(scope)
-            .request_layer(Logger)
-            .response_layer(Logger),
-    );
+    App::builder(scope)
+        .request_layer(Logger)
+        .response_layer(Logger)
+        .run::<Http1>("127.0.0.1:8080");
 }

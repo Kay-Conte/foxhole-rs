@@ -3,11 +3,9 @@ use std::sync::{Arc, RwLock};
 use foxhole::{
     action::Html,
     connection::Http1,
-    framework::run_with_cache,
     resolve::{Endpoint, Get, Query},
-    sys,
     type_cache::{TypeCache, TypeCacheKey},
-    Scope, routing::Router,
+    Scope, App, sys
 };
 
 pub struct Counter(u32);
@@ -39,5 +37,7 @@ fn main() {
 
     println!("Try connecting with a browser at 'http://localhost:8080'");
 
-    run_with_cache::<Http1>("0.0.0.0:8080", Router::builder(scope), cache);
+    App::builder(scope)
+        .cache(cache)
+        .run::<Http1>("0.0.0.0:8080");
 }

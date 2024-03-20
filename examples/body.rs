@@ -1,7 +1,7 @@
 use foxhole::{
     connection::Http1,
     resolve::{Post, Resolve, ResolveGuard},
-    run, sys, PathIter, RequestState, Scope, routing::Router,
+    sys, PathIter, RequestState, Scope, App
 };
 
 use std::str;
@@ -26,6 +26,7 @@ fn post(_post: Post, body: Body) -> u16 {
 
 fn main() {
     let scope = Scope::new(sys![post]);
-
-    run::<Http1>("127.0.0.1:8080", Router::builder(scope));
+    
+    App::builder(scope)
+        .run::<Http1>("127.0.0.1:8080");
 }
