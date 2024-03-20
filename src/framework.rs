@@ -12,45 +12,67 @@ mod framework {
 
     use crate::{
         connection::Connection,
-        routing::Router,
+        routing::{Router, Scope},
         tasks::{ConnectionTask, TaskPool},
         type_cache::TypeCache,
+        Request, Response,
+        layers::Layer,
     };
 
-    /// Application entry point. Call this to run your application.
-    pub fn run<C>(address: impl ToSocketAddrs, router: Router)
-    where
-        C: 'static + Connection,
-    {
-        run_with_cache::<C>(address, router, TypeCache::new())
+    pub struct App {
+        router: Router,
+        type_cache: TypeCache,
     }
+    
+    impl App {
+        pub fn builder(scope: impl Into<Scope>) -> Self {
+            Self {
+                router: Router::new(scope),
+                type_cache: TypeCache::new(),
+            }
+        }
 
-    /// Application entry point with an initialized cache.
-    pub fn run_with_cache<C>(address: impl ToSocketAddrs, router: Router, type_cache: TypeCache)
-    where
-        C: 'static + Connection,
-    {
-        let incoming = TcpListener::bind(address).expect("Could not bind to local address");
+        pub fn request_layer(mut self, layer: impl 'static + Layer<Request> + Send + Sync) -> Self {
+            self.router.request_layer = Box::new(layer);
+            self
+        }
 
-        let router = Arc::new(router);
-        let type_cache = Arc::new(RwLock::new(type_cache));
+        pub fn response_layer(mut self, layer: impl 'static + Layer<Response> + Send + Sync) -> Self {
+            self.router.response_layer = Box::new(layer);
+            self
+        }
 
-        let task_pool = TaskPool::new();
+        pub fn cache(mut self, cache: TypeCache) -> Self {
+            self.type_cache = cache; 
+            self
+        }
 
-        loop {
-            let Ok((stream, _addr)) = incoming.accept() else {
-                continue;
-            };
+        pub fn run<C>(self, address: impl ToSocketAddrs)
+        where
+            C: 'static + Connection,
+        {
+            let incoming = TcpListener::bind(address).expect("Could not bind to local address");
 
-            let task = ConnectionTask::<C> {
-                task_pool: task_pool.clone(),
-                cache: type_cache.clone(),
-                stream,
-                router: router.clone(),
-                phantom_data: PhantomData,
-            };
+            let router = Arc::new(self.router);
+            let type_cache = Arc::new(RwLock::new(self.type_cache));
 
-            task_pool.send_task(task);
+            let task_pool = TaskPool::new();
+
+            loop {
+                let Ok((stream, _addr)) = incoming.accept() else {
+                    continue;
+                };
+
+                let task = ConnectionTask::<C> {
+                    task_pool: task_pool.clone(),
+                    cache: type_cache.clone(),
+                    stream,
+                    router: router.clone(),
+                    phantom_data: PhantomData,
+                };
+
+                task_pool.send_task(task);
+            }
         }
     }
 }

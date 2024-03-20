@@ -22,7 +22,7 @@ use tasks::BoxedBodyRequest;
 pub use tasks::PathIter;
 
 pub use action::{Action, IntoResponse};
-pub use framework::run;
+pub use framework::App;
 pub use routing::Scope;
 pub use tasks::RequestState;
 
