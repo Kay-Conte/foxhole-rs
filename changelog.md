@@ -1,6 +1,7 @@
 # [unreleased]
 
 ### Added
+- Https/Tls support under feature flag 'tls'
 - Http1 connection handler
 - Various new `Resolve` and `Response` types
   - `&[u8]` is now resolve, representing the raw body of the request 
