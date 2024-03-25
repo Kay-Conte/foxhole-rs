@@ -1,42 +1,6 @@
 use std::collections::HashMap;
 
-use crate::{layers::Layer, systems::DynSystem, Request, Response};
-
-pub struct Router {
-    root: Scope,
-    request_layer: Box<dyn Layer<Request> + Send + Sync>,
-    response_layer: Box<dyn Layer<Response> + Send + Sync>,
-}
-
-impl Router {
-    pub fn new(root: impl Into<Scope>) -> Self {
-        Router {
-            root: root.into(),
-            request_layer: Box::new(()),
-            response_layer: Box::new(()),
-        }
-    }
-
-    pub fn request_layer(&mut self, layer: impl 'static + Layer<Request> + Send + Sync) {
-        self.request_layer = Box::new(layer);
-    }
-
-    pub fn response_layer(&mut self, layer: impl 'static + Layer<Response> + Send + Sync) {
-        self.response_layer = Box::new(layer);
-    }
-
-    pub fn get_request_layer(&self) -> &dyn Layer<Request> {
-        self.request_layer.as_ref()
-    }
-
-    pub fn get_response_layer(&self) -> &dyn Layer<Response> {
-        self.response_layer.as_ref()
-    }
-
-    pub fn scope(&self) -> &Scope {
-        &self.root
-    }
-}
+use crate::systems::DynSystem;
 
 /// A Node in the Router tree.
 pub struct Scope {

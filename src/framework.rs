@@ -8,13 +8,12 @@ use std::{
 
 use crate::{
     connection::Connection,
-    layers::Layer,
-    routing::{Router, Scope},
+    layers::{BoxLayer, DefaultResponseGroup, Layer},
+    routing::Scope,
     tasks::TaskPool,
     type_cache::TypeCache,
     Request, Response,
 };
-
 
 #[cfg(not(feature = "tls"))]
 use crate::tasks::ConnectionTask;
@@ -26,7 +25,9 @@ use crate::tasks::SecuredConnectionTask;
 use rustls::ServerConfig;
 
 pub struct App {
-    router: Router,
+    tree: Scope,
+    request_layer: BoxLayer<Request>,
+    response_layer: BoxLayer<Response>,
     type_cache: TypeCache,
 
     #[cfg(feature = "tls")]
@@ -36,7 +37,9 @@ pub struct App {
 impl App {
     pub fn builder(scope: impl Into<Scope>) -> Self {
         Self {
-            router: Router::new(scope),
+            tree: scope.into(),
+            request_layer: Box::new(()),
+            response_layer: Box::new(DefaultResponseGroup::new()),
             type_cache: TypeCache::new(),
 
             #[cfg(feature = "tls")]
@@ -45,12 +48,12 @@ impl App {
     }
 
     pub fn request_layer(mut self, layer: impl 'static + Layer<Request> + Send + Sync) -> Self {
-        self.router.request_layer(layer);
+        self.request_layer = Box::new(layer);
         self
     }
 
     pub fn response_layer(mut self, layer: impl 'static + Layer<Response> + Send + Sync) -> Self {
-        self.router.response_layer(layer);
+        self.response_layer = Box::new(layer);
         self
     }
 
@@ -72,7 +75,9 @@ impl App {
         let incoming = TcpListener::bind(address).expect("Could not bind to local address");
 
         let type_cache = Arc::new(RwLock::new(self.type_cache));
-        let router = Arc::new(self.router);
+        let router = Arc::new(self.tree);
+        let request_layer = Arc::new(self.request_layer);
+        let response_layer = Arc::new(self.response_layer);
 
         #[cfg(feature = "tls")]
         let tls_config = match self.tls_config {
@@ -103,6 +108,8 @@ impl App {
                 cache: type_cache.clone(),
                 stream,
                 router: router.clone(),
+                response_layer: response_layer.clone(),
+                request_layer: request_layer.clone(),
                 phantom_data: PhantomData,
             };
 

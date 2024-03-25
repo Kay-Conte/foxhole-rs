@@ -16,9 +16,9 @@ use http::Request;
 use crate::{
     connection::{Connection, Responder},
     get_as_slice::GetAsSlice,
-    routing::Router,
+    layers::BoxLayer,
     type_cache::TypeCacheShared,
-    IntoResponse,
+    IntoResponse, Response, Scope,
 };
 
 #[cfg(feature = "tls")]
@@ -54,7 +54,10 @@ pub(crate) struct ConnectionTask<C> {
     pub stream: TcpStream,
 
     /// A handle to the applications router tree
-    pub router: Arc<Router>,
+    pub router: Arc<Scope>,
+
+    pub request_layer: Arc<BoxLayer<crate::Request>>,
+    pub response_layer: Arc<BoxLayer<Response>>,
 
     pub phantom_data: PhantomData<C>,
 }
@@ -84,6 +87,8 @@ where
                 request: r,
                 responder,
                 router: self.router.clone(),
+                request_layer: self.request_layer.clone(),
+                response_layer: self.response_layer.clone(),
             });
         }
     }
@@ -159,7 +164,10 @@ pub(crate) struct RequestTask<R> {
     pub responder: R,
 
     /// A handle to the applications router tree
-    pub router: Arc<Router>,
+    pub router: Arc<Scope>,
+
+    pub request_layer: Arc<BoxLayer<crate::Request>>,
+    pub response_layer: Arc<BoxLayer<Response>>,
 }
 
 impl<R> Task for RequestTask<R>
@@ -178,14 +186,14 @@ where
             request: self.request,
         };
 
-        self.router.get_request_layer().execute(&mut ctx.request);
+        self.request_layer.execute(&mut ctx.request);
 
-        let mut cursor = self.router.scope();
+        let mut cursor = self.router.as_ref();
 
         loop {
             for system in cursor.systems() {
                 if let Some(mut r) = system.call(&ctx, &mut path_iter) {
-                    self.router.get_response_layer().execute(&mut r);
+                    self.response_layer.execute(&mut r);
 
                     self.responder.respond(r).unwrap();
 

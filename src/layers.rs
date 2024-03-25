@@ -2,8 +2,10 @@ use http::HeaderValue;
 
 use crate::{Request, Response};
 
+pub type BoxLayer<T> = Box<dyn 'static + Layer<T> + Send + Sync>;
+
 pub struct LayerGroup<I> {
-    layers: Vec<Box<dyn 'static + Layer<I> + Send + Sync>>,
+    layers: Vec<BoxLayer<I>>,
 }
 
 impl<I> LayerGroup<I> {
@@ -35,18 +37,6 @@ impl Layer<Request> for () {
 
 impl Layer<Response> for () {
     fn execute(&self, _data: &mut Response) {}
-}
-
-pub struct ResponseGroup {
-    layers: Vec<Box<dyn 'static + Layer<Response> + Send + Sync>>,
-}
-
-impl Layer<Response> for ResponseGroup {
-    fn execute(&self, data: &mut Response) {
-        for layer in &self.layers {
-            layer.execute(data)
-        }
-    }
 }
 
 pub struct DefaultResponseGroup;
