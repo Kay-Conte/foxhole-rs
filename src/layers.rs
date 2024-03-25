@@ -49,22 +49,16 @@ impl Layer<Response> for ResponseGroup {
     }
 }
 
-pub struct DefaultResponseGroup(LayerGroup<Response>);
-
-impl Layer<Response> for DefaultResponseGroup {
-    fn execute(&self, data: &mut Response) {
-        self.0.execute(data)
-    }
-}
+pub struct DefaultResponseGroup;
 
 impl DefaultResponseGroup {
-    pub fn new() -> Self {
+    pub fn new() -> LayerGroup<Response> {
         let group = LayerGroup::new().add_layer(SetContentLength);
 
         #[cfg(feature = "date")]
         let group = group.add_layer(SetDate);
 
-        Self(group)
+        group
     }
 }
 
