@@ -34,18 +34,20 @@ Foxhole is a simple, fast, synchronous framework built for finishing your projec
 Foxhole uses a set of handler systems and routing modules to handle requests and responses.   
 Here's a starting example of a Hello World server.
 ```rust
-use foxhole::{connection::Http1, resolve::Get, action::Html, run, sys, Scope};
+use foxhole::{action::Html, connection::Http1, resolve::Get, App, sys, Scope};
 
 fn get(_get: Get) -> Html {
-    Html("<h1> Foxhole </h1>".to_string())
+    Html(String::from("<h1> Foxhole! </h1>"))
 }
 
 fn main() {
     let scope = Scope::new(sys![get]);
 
-    // Just so tests dont run infinitely. For whatever reason `not(test)` runs anyways
+    println!("Running on '127.0.0.1:8080'");
+
     #[cfg(test)]
-    run::<Http1>("127.0.0.1:8080", Router::builder(scope));
+    App::builder(scope)
+        .run::<Http1>("127.0.0.1:8080");
 } 
 ```
 
