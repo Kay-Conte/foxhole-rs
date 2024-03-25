@@ -11,8 +11,9 @@ impl<I> LayerGroup<I> {
         LayerGroup { layers: Vec::new() }
     }
 
-    pub fn add_layer(&mut self, layer: impl 'static + Layer<I> + Send + Sync) {
-        self.layers.push(Box::new(layer))
+    pub fn add_layer(mut self, layer: impl 'static + Layer<I> + Send + Sync) -> Self {
+        self.layers.push(Box::new(layer));
+        self
     }
 }
 
@@ -48,6 +49,25 @@ impl Layer<Response> for ResponseGroup {
     }
 }
 
+pub struct DefaultResponseGroup(LayerGroup<Response>);
+
+impl Layer<Response> for DefaultResponseGroup {
+    fn execute(&self, data: &mut Response) {
+        self.0.execute(data)
+    }
+}
+
+impl DefaultResponseGroup {
+    pub fn new() -> Self {
+        let group = LayerGroup::new().add_layer(SetContentLength);
+
+        #[cfg(feature = "date")]
+        let group = group.add_layer(SetDate);
+
+        Self(group)
+    }
+}
+
 pub struct SetContentLength;
 
 impl Layer<Response> for SetContentLength {
@@ -62,5 +82,19 @@ impl Layer<Response> for SetContentLength {
             .expect("Failed to parse length as HeaderValue");
 
         data.headers_mut().insert("content-length", value);
+    }
+}
+
+#[cfg(feature = "date")]
+pub struct SetDate;
+
+#[cfg(feature = "date")]
+impl Layer<Response> for SetDate {
+    fn execute(&self, data: &mut Response) {
+        let date = chrono::Utc::now().to_rfc2822();
+
+        let value = HeaderValue::from_str(&date).expect("Failed to convert date to header value");
+
+        data.headers_mut().insert("date", value);
     }
 }
