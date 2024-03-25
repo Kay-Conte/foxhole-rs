@@ -2,11 +2,10 @@ use std::collections::HashMap;
 
 use crate::{layers::Layer, systems::DynSystem, Request, Response};
 
-// layers gotta be pub cuz they're used in framework.rs, move this there later or idk
 pub struct Router {
     root: Scope,
-    pub request_layer: Box<dyn Layer<Request> + Send + Sync>,
-    pub response_layer: Box<dyn Layer<Response> + Send + Sync>,
+    request_layer: Box<dyn Layer<Request> + Send + Sync>,
+    response_layer: Box<dyn Layer<Response> + Send + Sync>,
 }
 
 impl Router {
@@ -18,18 +17,12 @@ impl Router {
         }
     }
 
-    // pub fn request_layer(mut self, layer: impl 'static + Layer<Request> + Send + Sync) -> Self {
-    //     self.request_layer = Box::new(layer);
-    //     self
-    // }
-    //
-    // pub fn response_layer(mut self, layer: impl 'static + Layer<Response> + Send + Sync) -> Self {
-    //     self.response_layer = Box::new(layer);
-    //     self
-    // }
+    pub fn request_layer(&mut self, layer: impl 'static + Layer<Request> + Send + Sync) {
+        self.request_layer = Box::new(layer);
+    }
 
-    pub fn scope(&self) -> &Scope {
-        &self.root
+    pub fn response_layer(&mut self, layer: impl 'static + Layer<Response> + Send + Sync) {
+        self.response_layer = Box::new(layer);
     }
 
     pub fn get_request_layer(&self) -> &dyn Layer<Request> {
@@ -38,6 +31,10 @@ impl Router {
 
     pub fn get_response_layer(&self) -> &dyn Layer<Response> {
         self.response_layer.as_ref()
+    }
+
+    pub fn scope(&self) -> &Scope {
+        &self.root
     }
 }
 
