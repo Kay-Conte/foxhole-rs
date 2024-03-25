@@ -18,16 +18,19 @@
  
 Foxhole is a simple, fast, synchronous framework built for finishing your projects.
  
+# Opinionated decisions
+- No async. Binary bloat and poor ergonomics
+- Minimal dependencies
+
 # Features
 - Blazing fast performance (~600k req/sec on a ryzen 7 5700x with `wrk`) May be outdated.
 - Built-in threading system that allows you to efficiently handle requests.
-- Absolutely no async elements, improving ergonomics.
 - Minimal build size, ~500kb when stripped.
 - Uses `http`, a model library you may already be familiar with.
 - Magic function handlers! See [Getting Started](#getting-started).
 - Unique powerful routing system
-- Full Http1.1 support
-- Https support in the works. Available on the main branch under feature "tls". Untested!
+- near Full Http1.1 support
+- Https support in the works. Available on the under feature "tls". largely Untested!
 - Http2 support coming.
 
 # Getting Started
@@ -55,11 +58,11 @@ Let's break this down into its components.
 
 ## Routing
 
-The router will step through the url by its parts, first starting with the route. It will try to run **all** systems of every node it steps through in order. Once a response is received it will stop stepping over the url and respond immediately. 
+The scope tree will step through the url by its parts, first starting with the root. It will try to run **all** systems of every node it steps through in order. Once a response is received it will stop stepping over the url and respond immediately. 
 
 lets assume we have the tree `Scope::new(sys![auth]).route("page", sys![get_page])` and the request `/page`
 
-In this example, the router will first call `auth` if auth returns a response, say the user is not authorized and we would like to respond early, then we stop there and respond `401`. Otherwise we continue to the next node `get_page`
+In this example, the router will first call `auth` at the root of the tree. If `auth` returns a response, say the user is not authorized and we would like to respond early, then we stop there and respond `401`. Otherwise we continue to the next node `get_page`
 
 If no responses are returned by the end of the tree the server will automatically return `404`. This will be configuarable in the future.
 
@@ -96,7 +99,7 @@ impl<'a> Resolve<'a> for Get {
 
 Systems are required to return a value that implements `Action`. 
 
-Additionally note the existence of `IntoResponse` which can be implemented instead for types that always respond.
+Additionally note the existence of `IntoResponse` which can be implemented instead for types that are always a response.
 
 If a type returns `None` out of `Action` a response will not be sent and routing will continue to further nodes. This will likely become an extended enum on websocket support.
 
