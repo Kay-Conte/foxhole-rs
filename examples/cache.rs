@@ -2,10 +2,8 @@ use std::sync::{Arc, RwLock};
 
 use foxhole::{
     action::Html,
-    connection::Http1,
     resolve::{Endpoint, Get, Query},
-    type_cache::{TypeCache, TypeCacheKey},
-    Scope, App, sys
+    sys, App, Http1, Scope, TypeCache, TypeCacheKey,
 };
 
 pub struct Counter(u32);

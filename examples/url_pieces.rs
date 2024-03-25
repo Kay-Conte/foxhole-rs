@@ -1,8 +1,7 @@
 use foxhole::{
-    connection::Http1,
-    http_utils::IntoRawBytes,
+    Http1,
     resolve::{Endpoint, Get, UrlCollect, UrlPart},
-    sys, IntoResponse, Scope, App
+    sys, App, IntoRawBytes, IntoResponse, Scope,
 };
 
 pub struct User(String);
@@ -37,6 +36,5 @@ fn main() {
 
     println!("Try connecting on a browser at 'http://localhost:8080/user/USERNAME'");
 
-    App::builder(scope)
-        .run::<Http1>("0.0.0.0:8080");
+    App::builder(scope).run::<Http1>("0.0.0.0:8080");
 }

@@ -1,4 +1,4 @@
-use foxhole::{action::Html, connection::Http1, resolve::Get, App, sys, Scope};
+use foxhole::{action::Html, Http1, resolve::Get, App, sys, Scope};
 
 fn get(_get: Get) -> Html {
     Html(String::from("<h1> Foxhole! </h1>"))

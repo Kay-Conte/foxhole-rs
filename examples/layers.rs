@@ -1,9 +1,6 @@
 use foxhole::{
-    action::Html,
-    connection::Http1,
-    layers::{DefaultResponseGroup, Layer},
-    resolve::Get,
-    sys, App, Request, Response, Scope,
+    action::Html, resolve::Get, sys, App, DefaultResponseGroup, Http1, Layer, Request, Response,
+    Scope,
 };
 
 pub struct Logger;

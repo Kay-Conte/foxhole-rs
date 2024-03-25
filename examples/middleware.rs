@@ -1,8 +1,6 @@
 use foxhole::{
-    action::Html,
-    connection::Http1,
-    resolve::{Get, Resolve, ResolveGuard},
-    sys, Action, App, PathIter, Scope,
+    action::Html, connection::Http1, resolve::Get, sys, Action, App, PathIter, Resolve,
+    ResolveGuard, Scope,
 };
 
 struct Auth {

@@ -1,5 +1,10 @@
 #![doc = include_str!("../README.md")]
 
+mod lazy;
+mod sequential_writer;
+mod tasks;
+mod tls_connection;
+
 pub mod action;
 pub mod connection;
 pub mod framework;
@@ -12,21 +17,20 @@ pub mod routing;
 pub mod systems;
 pub mod type_cache;
 
-mod lazy;
-mod sequential_writer;
-mod tasks;
-mod tls_connection;
-
-use action::RawResponse;
-use tasks::BoxedBodyRequest;
-pub use tasks::PathIter;
-
 pub use action::{Action, IntoResponse};
+pub use connection::Http1;
 pub use framework::App;
+pub use http_utils::IntoRawBytes;
+pub use layers::{DefaultResponseGroup, Layer};
+pub use resolve::{Resolve, ResolveGuard};
 pub use routing::Scope;
-pub use tasks::RequestState;
+pub use tasks::{PathIter, RequestState};
+pub use type_cache::{TypeCache, TypeCacheKey};
 
 pub use http;
 
-pub type Request = BoxedBodyRequest;
-pub type Response = RawResponse;
+/// Request type used by most of `foxhole`
+pub type Request = tasks::BoxedBodyRequest;
+
+/// Response type used by most of `foxhole`
+pub type Response = action::RawResponse;

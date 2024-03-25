@@ -1,5 +1,5 @@
 use foxhole::{
-    connection::Http1,
+    Http1,
     resolve::{Endpoint, Get},
     IntoResponse, Scope, App, sys
 };
