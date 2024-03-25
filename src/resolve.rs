@@ -105,6 +105,7 @@ impl<'a> Resolve<'a> for Endpoint {
     }
 }
 
+/// Collects the entire `Url` without modifying the `path_iter`
 pub struct Url(pub Vec<String>);
 
 impl<'a> Resolve<'a> for Url {

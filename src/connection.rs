@@ -16,13 +16,16 @@ use crate::{
     tls_connection::TlsConnection,
 };
 
+/// A marker used to encapsulate the required traits for a stream used by `Http1`
 pub trait BoxedStreamMarker: Read + Write + BoxedTryClone + SetTimeout + Send + Sync {}
 
 impl<T> BoxedStreamMarker for T where T: Read + Write + BoxedTryClone + SetTimeout + Send + Sync {}
 
 type BoxedStream = Box<dyn BoxedStreamMarker>;
 
+/// A trait providing a `set_timeout` function for streams
 pub trait SetTimeout {
+    /// Set the timeout for reads and writes on the current object
     fn set_timeout(&mut self, timeout: Option<Duration>) -> std::io::Result<()>;
 }
 
@@ -40,6 +43,7 @@ impl SetTimeout for TlsConnection {
     }
 }
 
+/// A trait providing a method of cloning for boxed streams
 pub trait BoxedTryClone {
     fn try_clone(&self) -> std::io::Result<BoxedStream>;
 }
@@ -58,20 +62,24 @@ impl BoxedTryClone for TlsConnection {
     }
 }
 
+/// A trait providing necessary functions to handle a connection
 pub trait Connection: Sized + Send {
     type Body: 'static + GetAsSlice + Send;
     type Responder: 'static + Responder;
 
     fn new(conn: BoxedStream) -> Result<Self, std::io::Error>;
 
-    fn set_read_timeout(&mut self, timeout: Option<Duration>) -> Result<(), std::io::Error>;
+    fn set_timeout(&mut self, timeout: Option<Duration>) -> Result<(), std::io::Error>;
 
     /// Reading of the body of the previous frame may occur on subsequent calls depending on
     /// implementation
     fn next_frame(&mut self) -> Result<(Request<Self::Body>, Self::Responder), std::io::Error>;
 }
 
+/// A trait providing necessary functionality to respond to a connection
 pub trait Responder: Sized + Send {
+    /// Write bytes of response to the underlying writer. This can be expected to be the full
+    /// response
     fn write_bytes(self, bytes: Vec<u8>) -> Result<(), std::io::Error>;
 
     fn respond(self, response: impl Into<RawResponse>) -> Result<(), std::io::Error> {
@@ -126,7 +134,7 @@ impl Connection for Http1 {
         })
     }
 
-    fn set_read_timeout(&mut self, timeout: Option<Duration>) -> Result<(), std::io::Error> {
+    fn set_timeout(&mut self, timeout: Option<Duration>) -> Result<(), std::io::Error> {
         self.conn.set_timeout(timeout)
     }
 

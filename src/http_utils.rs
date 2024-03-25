@@ -31,12 +31,12 @@ impl std::fmt::Display for ParseError {
 
 impl std::error::Error for ParseError {}
 
+/// `Version` Extension trait 
 pub trait VersionExt: Sized {
-    /// # Errors
-    ///
-    /// Returns `Err` if the `&str` isn't a valid version of the HTTP protocol
+    /// Parse `Version` from a `&str`. Returns `Err` if the `&str` isn't a valid version of the HTTP protocol
     fn parse_version(s: &str) -> Result<Self, ParseError>;
 
+    /// Convert a `Version` to a `String`
     fn to_string(&self) -> String;
 }
 
@@ -64,7 +64,7 @@ impl VersionExt for Version {
     }
 }
 
-/// the entirety of the header must be valid utf8
+/// Read a request from a source
 pub fn take_request<R>(reader: &mut R) -> Result<Request<()>, ParseError>
 where
     R: BufRead,

@@ -5,6 +5,7 @@ use std::{
 
 type Value = Box<dyn Any + Sync + Send>;
 
+/// This trait allows a type to be used as a key in a `TypeCache`
 pub trait TypeCacheKey: 'static {
     type Value: Send + Sync;
 }

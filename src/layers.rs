@@ -4,21 +4,25 @@ use crate::{Request, Response};
 
 pub type BoxLayer<T> = Box<dyn 'static + Layer<T> + Send + Sync>;
 
+/// A collection of `Layers` to be executed in sequence.
 pub struct LayerGroup<I> {
     layers: Vec<BoxLayer<I>>,
 }
 
 impl<I> LayerGroup<I> {
+    /// Constructs a new `LayerGroup`
     pub fn new() -> Self {
         LayerGroup { layers: Vec::new() }
     }
 
+    /// pushes a new `Layer` to the stack
     pub fn add_layer(mut self, layer: impl 'static + Layer<I> + Send + Sync) -> Self {
         self.layers.push(Box::new(layer));
         self
     }
 }
 
+/// A trait providing middleware behaviour on `Request`s and `Response`s
 pub trait Layer<I> {
     fn execute(&self, data: &mut I);
 }
@@ -39,6 +43,7 @@ impl Layer<Response> for () {
     fn execute(&self, _data: &mut Response) {}
 }
 
+/// Default layers for `Response`s
 pub struct DefaultResponseGroup;
 
 impl DefaultResponseGroup {
@@ -52,6 +57,7 @@ impl DefaultResponseGroup {
     }
 }
 
+/// Sets the content length header of all outgoing requests that may be missing it.
 pub struct SetContentLength;
 
 impl Layer<Response> for SetContentLength {
@@ -69,6 +75,7 @@ impl Layer<Response> for SetContentLength {
     }
 }
 
+/// Sets the date header of all outgoing requests
 #[cfg(feature = "date")]
 pub struct SetDate;
 

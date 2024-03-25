@@ -24,6 +24,7 @@ use crate::tasks::SecuredConnectionTask;
 #[cfg(feature = "tls")]
 use rustls::ServerConfig;
 
+/// Main application entry point. Construct this type to run your application.
 pub struct App {
     tree: Scope,
     request_layer: BoxLayer<Request>,
@@ -35,6 +36,7 @@ pub struct App {
 }
 
 impl App {
+    /// Constructs a new application
     pub fn builder(scope: impl Into<Scope>) -> Self {
         Self {
             tree: scope.into(),
@@ -47,16 +49,19 @@ impl App {
         }
     }
 
+    /// Overrides the default request `Layer` if one is set
     pub fn request_layer(mut self, layer: impl 'static + Layer<Request> + Send + Sync) -> Self {
         self.request_layer = Box::new(layer);
         self
     }
 
+    /// Overrides the default response `Layer` if one is set
     pub fn response_layer(mut self, layer: impl 'static + Layer<Response> + Send + Sync) -> Self {
         self.response_layer = Box::new(layer);
         self
     }
 
+    /// Sets the cache to be used by the application
     pub fn cache(mut self, cache: TypeCache) -> Self {
         self.type_cache = cache;
         self
@@ -68,6 +73,7 @@ impl App {
         self
     }
 
+    /// Executes the application. This will currently never return.
     pub fn run<C>(self, address: impl ToSocketAddrs)
     where
         C: 'static + Connection,

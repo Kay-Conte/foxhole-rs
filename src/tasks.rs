@@ -72,7 +72,7 @@ where
         };
 
         connection
-            .set_read_timeout(Some(Duration::from_secs(TIMEOUT)))
+            .set_timeout(Some(Duration::from_secs(TIMEOUT)))
             .expect("Shouldn't fail unless duration is 0");
 
         while let Ok((request, responder)) = connection.next_frame() {
