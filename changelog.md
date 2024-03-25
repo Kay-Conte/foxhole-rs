@@ -3,6 +3,8 @@
 ### Added
 - `Layer` trait and `LayerGroup` structure.
 - `SetContentLength` Layer
+- `SetDate` Layer
+- `DefaultResponseLayer` layer group
 - Https/Tls support under feature flag 'tls'
 - Http1 connection handler
 - Various new `Resolve` and `Response` types
@@ -13,10 +15,15 @@
   - `Js` a response with the `text/javascript` content type hint
 
 ### Changed
+- Renamed `Route` to `Scope`
+- The `TypeCache` is no longer behind an `RwLock`
 - Changed `framework` to a builder pattern
 - Renamed `MaybeIntoResponse` to `Action`
 - Refactored various items into modules `resolve` and `action` exports to related items have changed
 - `run` and `run_with_cache` now take a generic implementing `Connection` used as the tcpstream handler.
+
+### Fixed
+- A bug where requests would sometimes not be handled until another request was received.
 
 # [0.3.0]
 
