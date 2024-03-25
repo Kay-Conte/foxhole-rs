@@ -2,6 +2,7 @@
 
 ### Added
 - `Layer` trait and `LayerGroup` structure.
+- `SetContentLength` Layer
 - Https/Tls support under feature flag 'tls'
 - Http1 connection handler
 - Various new `Resolve` and `Response` types
@@ -12,6 +13,7 @@
   - `Js` a response with the `text/javascript` content type hint
 
 ### Changed
+- Changed `framework` to a builder pattern
 - Renamed `MaybeIntoResponse` to `Action`
 - Refactored various items into modules `resolve` and `action` exports to related items have changed
 - `run` and `run_with_cache` now take a generic implementing `Connection` used as the tcpstream handler.
