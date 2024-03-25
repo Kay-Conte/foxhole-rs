@@ -1,12 +1,9 @@
 use std::{
     any::{Any, TypeId},
     collections::HashMap,
-    sync::{Arc, RwLock},
 };
 
 type Value = Box<dyn Any + Sync + Send>;
-
-pub type TypeCacheShared = Arc<RwLock<TypeCache>>;
 
 pub trait TypeCacheKey: 'static {
     type Value: Send + Sync;
@@ -45,6 +42,8 @@ impl TypeCache {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+
     use super::*;
 
     pub struct UserId;

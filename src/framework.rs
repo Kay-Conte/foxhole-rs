@@ -3,7 +3,7 @@
 use std::{
     marker::PhantomData,
     net::{TcpListener, ToSocketAddrs},
-    sync::{Arc, RwLock},
+    sync::Arc,
 };
 
 use crate::{
@@ -74,7 +74,7 @@ impl App {
     {
         let incoming = TcpListener::bind(address).expect("Could not bind to local address");
 
-        let type_cache = Arc::new(RwLock::new(self.type_cache));
+        let type_cache = Arc::new(self.type_cache);
         let router = Arc::new(self.tree);
         let request_layer = Arc::new(self.request_layer);
         let response_layer = Arc::new(self.response_layer);
@@ -99,6 +99,8 @@ impl App {
                 stream,
                 router: router.clone(),
                 tls_config: tls_config.clone(),
+                response_layer: response_layer.clone(),
+                request_layer: request_layer.clone(),
                 phantom_data: PhantomData,
             };
 

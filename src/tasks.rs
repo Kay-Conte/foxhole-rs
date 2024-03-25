@@ -17,7 +17,7 @@ use crate::{
     connection::{Connection, Responder},
     get_as_slice::GetAsSlice,
     layers::BoxLayer,
-    type_cache::TypeCacheShared,
+    type_cache::TypeCache,
     IntoResponse, Response, Scope,
 };
 
@@ -49,7 +49,7 @@ pub(crate) struct ConnectionTask<C> {
     pub task_pool: TaskPool,
 
     /// An application global type cache
-    pub cache: TypeCacheShared,
+    pub cache: Arc<TypeCache>,
 
     pub stream: TcpStream,
 
@@ -98,13 +98,17 @@ where
 pub(crate) struct SecuredConnectionTask<C> {
     pub task_pool: TaskPool,
 
-    pub cache: TypeCacheShared,
+    pub cache: Arc<TypeCache>,
 
     pub stream: TcpStream,
 
-    pub router: Arc<Router>,
+    pub router: Arc<Scope>,
 
     pub tls_config: Arc<ServerConfig>,
+
+    pub request_layer: Arc<BoxLayer<crate::Request>>,
+    pub response_layer: Arc<BoxLayer<Response>>,
+
 
     pub phantom_data: PhantomData<C>,
 }
@@ -151,13 +155,15 @@ where
                 request: r,
                 responder,
                 router: self.router.clone(),
+                request_layer: self.request_layer.clone(),
+                response_layer: self.response_layer.clone(),
             });
         }
     }
 }
 
 pub(crate) struct RequestTask<R> {
-    pub cache: TypeCacheShared,
+    pub cache: Arc<TypeCache>,
 
     pub request: BoxedBodyRequest,
 
@@ -218,7 +224,7 @@ where
 
 /// Holds the state of the request handling. This can be accessed via the `Resolve` trait.
 pub struct RequestState {
-    pub global_cache: TypeCacheShared,
+    pub global_cache: Arc<TypeCache>,
     pub request: BoxedBodyRequest,
 }
 

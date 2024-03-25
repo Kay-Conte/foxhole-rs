@@ -85,12 +85,7 @@ where
     type Output = Self;
 
     fn resolve(ctx: &'a RequestState, _path_iter: &mut PathIter) -> ResolveGuard<Self> {
-        ctx.global_cache
-            .read()
-            .unwrap()
-            .get::<K>()
-            .map(|v| Query(v.clone()))
-            .into()
+        ctx.global_cache.get::<K>().map(|v| Query(v.clone())).into()
     }
 }
 
