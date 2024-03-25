@@ -57,11 +57,11 @@ Let's break this down into its components.
 
 The router will step through the url by its parts, first starting with the route. It will try to run **all** systems of every node it steps through in order. Once a response is received it will stop stepping over the url and respond immediately. 
 
-lets assume we have the router `Scope::new(sys![auth]).route("page", sys![get_page])` and the request `/page`
+lets assume we have the tree `Scope::new(sys![auth]).route("page", sys![get_page])` and the request `/page`
 
 In this example, the router will first call `auth` if auth returns a response, say the user is not authorized and we would like to respond early, then we stop there and respond `401`. Otherwise we continue to the next node `get_page`
 
-If no responses are returned by the end of the `Router` the server will automatically return `404`. This will be configuarable in the future.
+If no responses are returned by the end of the tree the server will automatically return `404`. This will be configuarable in the future.
 
 ## Parameters/Guards
 
