@@ -1,6 +1,9 @@
 use foxhole::{
-    action::Html, connection::Http1, layers::Layer, resolve::Get, sys, App, Request, Response,
-    Scope,
+    action::Html,
+    connection::Http1,
+    layers::{DefaultResponseGroup, Layer},
+    resolve::Get,
+    sys, App, Request, Response, Scope,
 };
 
 pub struct Logger;
@@ -30,6 +33,6 @@ fn main() {
 
     App::builder(scope)
         .request_layer(Logger)
-        .response_layer(Logger)
+        .response_layer(DefaultResponseGroup::new().add_layer(Logger))
         .run::<Http1>("127.0.0.1:8080");
 }
