@@ -75,7 +75,7 @@ pub trait Connection: Sized + Send {
     /// implementation
     fn next_frame(&mut self) -> Result<(Request<Self::Body>, Self::Responder), std::io::Error>;
 
-    fn try_clone_inner(&self) -> std::io::Result<BoxedStream>;
+    fn upgrade(self) -> BoxedStream;
 }
 
 /// A trait providing necessary functionality to respond to a connection
@@ -170,8 +170,8 @@ impl Connection for Http1 {
         Ok((req.map(|_| lazy), self.next_writer()?))
     }
 
-    fn try_clone_inner(&self) -> std::io::Result<BoxedStream> {
-        self.conn.try_clone()
+    fn upgrade(self) -> BoxedStream {
+        self.conn
     }
 }
 

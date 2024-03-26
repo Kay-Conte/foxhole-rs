@@ -64,7 +64,7 @@ pub(crate) struct ConnectionTask<C> {
 
 impl<C> Task for ConnectionTask<C>
 where
-    C: Connection,
+    C: 'static + Connection,
 {
     fn run(self: Box<Self>) {
         let Ok(mut connection) = C::new(Box::new(self.stream)) else {
@@ -82,29 +82,45 @@ where
                 b
             });
 
-            let should_close = if let Some(header) = r.headers().get("connection") {
-                header != "keep-alive"
-            } else {
-                true
-            };
+            if let Some(header) = r.headers().get("connection") {
+                if header == "upgrade" {
+                    self.task_pool.send_task(RequestTask {
+                        cache: self.cache.clone(),
+                        upgrade: Some(connection),
+                        request: r,
+                        responder,
+                        router: self.router.clone(),
+                        request_layer: self.request_layer.clone(),
+                        response_layer: self.response_layer.clone(),
+                    });
 
-            let Ok(inner) = connection.try_clone_inner() else {
-                return;
-            };
+                    break;
+                }
 
-            self.task_pool.send_task(RequestTask {
+                if header != "keep-alive" {
+                    self.task_pool.send_task(RequestTask::<_, C> {
+                        cache: self.cache.clone(),
+                        upgrade: None,
+                        request: r,
+                        responder,
+                        router: self.router.clone(),
+                        request_layer: self.request_layer.clone(),
+                        response_layer: self.response_layer.clone(),
+                    });
+
+                    break;
+                }
+            }
+
+            self.task_pool.send_task(RequestTask::<_, C> {
                 cache: self.cache.clone(),
-                connection: inner,
+                upgrade: None,
                 request: r,
                 responder,
                 router: self.router.clone(),
                 request_layer: self.request_layer.clone(),
                 response_layer: self.response_layer.clone(),
             });
-
-            if should_close {
-                break;
-            }
         }
     }
 }
@@ -182,7 +198,7 @@ where
     }
 }
 
-pub(crate) struct RequestTask<R> {
+pub(crate) struct RequestTask<R, C> {
     pub cache: Arc<TypeCache>,
 
     pub request: BoxedBodyRequest,
@@ -192,15 +208,17 @@ pub(crate) struct RequestTask<R> {
     /// A handle to the applications router tree
     pub router: Arc<Scope>,
 
-    pub connection: BoxedStream,
+    // Make this field optional to avoid upgrading `keep-alive` requests by the user
+    pub upgrade: Option<C>,
 
     pub request_layer: Arc<BoxLayer<crate::Request>>,
     pub response_layer: Arc<BoxLayer<Response>>,
 }
 
-impl<R> Task for RequestTask<R>
+impl<R, C> Task for RequestTask<R, C>
 where
     R: Responder,
+    C: Connection,
 {
     fn run(self: Box<Self>) {
         let path = self.request.uri().path().to_owned();
@@ -228,8 +246,17 @@ where
 
                         return;
                     }
-                    Action::Handle(f) => {
-                        f(self.connection);
+                    Action::Upgrade(f) => {
+                        let Some(connection) = self.upgrade else {
+                            return;
+                        };
+
+                        let Some(version) = ctx.request.headers().get("sec-websocket-version")
+                        else {
+                            return;
+                        };
+
+                        f(connection.upgrade());
 
                         return;
                     }
