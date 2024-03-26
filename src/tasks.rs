@@ -14,10 +14,11 @@ use std::{
 use http::Request;
 
 use crate::{
-    connection::{BoxedStream, Connection, Responder},
+    connection::{Connection, Responder},
     get_as_slice::GetAsSlice,
     layers::BoxLayer,
     type_cache::TypeCache,
+    websocket::encode_key,
     Action, IntoResponse, Response, Scope,
 };
 
@@ -82,8 +83,10 @@ where
                 b
             });
 
-            if let Some(header) = r.headers().get("connection") {
-                if header == "upgrade" {
+            let mut should_close: bool = true;
+
+            if let Some(header) = r.headers().get("connection").and_then(|i| i.to_str().ok()) {
+                if header.to_lowercase() == "upgrade" {
                     self.task_pool.send_task(RequestTask {
                         cache: self.cache.clone(),
                         upgrade: Some(connection),
@@ -97,19 +100,7 @@ where
                     break;
                 }
 
-                if header != "keep-alive" {
-                    self.task_pool.send_task(RequestTask::<_, C> {
-                        cache: self.cache.clone(),
-                        upgrade: None,
-                        request: r,
-                        responder,
-                        router: self.router.clone(),
-                        request_layer: self.request_layer.clone(),
-                        response_layer: self.response_layer.clone(),
-                    });
-
-                    break;
-                }
+                should_close = header != "keep-alive";
             }
 
             self.task_pool.send_task(RequestTask::<_, C> {
@@ -121,6 +112,10 @@ where
                 request_layer: self.request_layer.clone(),
                 response_layer: self.response_layer.clone(),
             });
+
+            if should_close {
+                break;
+            }
         }
     }
 }
@@ -247,14 +242,52 @@ where
                         return;
                     }
                     Action::Upgrade(f) => {
+                        // Todo move this handling to the constructor of `Action::Upgrade`
                         let Some(connection) = self.upgrade else {
+                            println!("no connection");
                             return;
                         };
 
-                        let Some(version) = ctx.request.headers().get("sec-websocket-version")
+                        let supports_version = ctx
+                            .request
+                            .headers()
+                            .get("sec-websocket-version")
+                            .and_then(|i| i.to_str().ok())
+                            .and_then(|i| i.split(",").find(|i| i.trim() == "13"))
+                            .is_some();
+
+                        if !supports_version {
+                            let _ = self.responder.respond(
+                                http::Response::builder()
+                                    .status(426)
+                                    .header("sec-websocket-version", "13")
+                                    .body(Vec::new())
+                                    .unwrap(),
+                            );
+
+                            return;
+                        }
+
+                        let Some(key) = ctx
+                            .request
+                            .headers()
+                            .get("sec-websocket-key")
+                            .and_then(|i| i.to_str().ok())
                         else {
                             return;
                         };
+
+                        let accept = encode_key(key);
+
+                        let _ = self.responder.respond(
+                            http::Response::builder()
+                                .status(101)
+                                .header("sec-websocket-accept", accept)
+                                .header("upgrade", "websocket")
+                                .header("connection", "upgrade")
+                                .body(Vec::new())
+                                .unwrap(),
+                        );
 
                         f(connection.upgrade());
 

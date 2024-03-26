@@ -1,6 +1,21 @@
 use std::io::ErrorKind;
 
+use base64::{engine::general_purpose::STANDARD, Engine};
+use sha1::{Digest, Sha1};
+
 use crate::{action::IntoAction, connection::BoxedStream, Action, Resolve, ResolveGuard};
+
+const GUID: &'static str = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
+
+pub(crate) fn encode_key(key: &str) -> String {
+    let concatenated = format!("{}{}", key, GUID);
+
+    let mut hasher = Sha1::new();
+    hasher.update(concatenated);
+    let result = hasher.finalize();
+
+    STANDARD.encode(&result)
+}
 
 pub struct Upgrade;
 
@@ -17,11 +32,16 @@ impl<'a> Resolve<'a> for Upgrade {
         ctx: &'a crate::RequestState,
         _path_iter: &mut crate::PathIter,
     ) -> crate::ResolveGuard<Self::Output> {
-        let Some(header) = ctx.request.headers().get("connection") else {
+        let Some(header) = ctx
+            .request
+            .headers()
+            .get("connection")
+            .and_then(|i| i.to_str().ok())
+        else {
             return ResolveGuard::None;
         };
 
-        if header == "upgrade" {
+        if header.to_lowercase() == "upgrade" {
             ResolveGuard::Value(Upgrade)
         } else {
             ResolveGuard::None
@@ -61,14 +81,14 @@ impl WebsocketConnection {
         let mut header_bytes = [0u8; 2];
         self.inner.read_exact(&mut header_bytes)?;
 
-        let fin = header_bytes[0] & 0x80 != 0;
+        // Todo Handle fragmented frames
+        let _fin = header_bytes[0] & 0x80 != 0;
         let opcode = header_bytes[0] & 0x0F;
         let masked = header_bytes[1] & 0x80 != 0;
         let mut payload_len = (header_bytes[1] & 0x7f) as u64;
 
         if payload_len == 126 {
             let mut extended_payload = [0u8; 2];
-
 
             self.inner.read_exact(&mut extended_payload)?;
 

@@ -5,9 +5,11 @@ use foxhole::{
 };
 
 fn get(upgrade: Upgrade) -> Websocket {
-    upgrade.handle(|mut ws| {
-        while let Ok(frame) = ws.next_frame() {
-            println!("{:?}", frame);
+    println!("Running");
+    upgrade.handle(|mut ws| loop {
+        match ws.next_frame() {
+            Ok(v) => println!("{:?}", v),
+            Err(e) => println!("{e:?}"),
         }
     })
 }
