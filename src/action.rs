@@ -1,6 +1,9 @@
 use http::{Response, Version};
 
-use crate::{connection::BoxedStream, http_utils::IntoRawBytes, Request};
+use crate::http_utils::IntoRawBytes;
+
+#[cfg(feature = "websocket")]
+use crate::{connection::BoxedStream, Request};
 
 pub type RawResponse = Response<Vec<u8>>;
 
@@ -12,6 +15,7 @@ pub trait IntoResponse {
 
 pub enum Action {
     Respond(RawResponse),
+    #[cfg(feature = "websocket")]
     Upgrade(fn(&Request) -> crate::Response, Box<dyn Fn(BoxedStream)>),
     None,
 }

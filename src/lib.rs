@@ -17,6 +17,7 @@ pub mod routing;
 pub mod systems;
 pub mod type_cache;
 
+#[cfg(feature = "websocket")]
 pub mod websocket;
 
 pub use action::{Action, IntoResponse};

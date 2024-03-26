@@ -13,6 +13,7 @@ default = ["date"]
 
 tls = []
 date = ["chrono"]
+websocket = ["sha1", "base64"]
 
 [dependencies]
 http = "0.2.9"
@@ -20,8 +21,8 @@ rustls = "0.23.2"
 
 chrono = { version = "0.4.35", optional = true }
 
-sha1 = "0.10.6"
-base64 = "0.22.0"
+sha1 = { version = "0.10.6", optional = true }
+base64 = { version = "0.22.0", optional = true }
 
 [dev-dependencies]
 rustls-pemfile = "2"

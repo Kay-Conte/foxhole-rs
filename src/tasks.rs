@@ -85,6 +85,7 @@ where
             let mut should_close: bool = true;
 
             if let Some(header) = r.headers().get("connection").and_then(|i| i.to_str().ok()) {
+                #[cfg(feature = "websocket")]
                 if header.to_lowercase() == "upgrade" {
                     self.task_pool.send_task(RequestTask {
                         cache: self.cache.clone(),
@@ -219,7 +220,8 @@ pub(crate) struct RequestTask<R, C> {
     /// A handle to the applications router tree
     pub router: Arc<Scope>,
 
-    // Make this field optional to avoid upgrading `keep-alive` requests by the user
+    /// This field is only used on `websocket`
+    #[allow(dead_code)]
     pub upgrade: Option<C>,
 
     pub request_layer: Arc<BoxLayer<crate::Request>>,
@@ -257,6 +259,7 @@ where
 
                         return;
                     }
+                    #[cfg(feature = "websocket")]
                     Action::Upgrade(r, f) => {
                         // Todo move this handling to the constructor of `Action::Upgrade`
                         let Some(connection) = self.upgrade else {
