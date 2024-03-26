@@ -14,7 +14,7 @@ use std::{
 use http::Request;
 
 use crate::{
-    connection::{Connection, Responder},
+    connection::{BoxedStream, Connection, Responder},
     get_as_slice::GetAsSlice,
     layers::BoxLayer,
     type_cache::TypeCache,
@@ -88,8 +88,13 @@ where
                 true
             };
 
+            let Ok(inner) = connection.try_clone_inner() else {
+                return;
+            };
+
             self.task_pool.send_task(RequestTask {
                 cache: self.cache.clone(),
+                connection: inner,
                 request: r,
                 responder,
                 router: self.router.clone(),
@@ -187,6 +192,8 @@ pub(crate) struct RequestTask<R> {
     /// A handle to the applications router tree
     pub router: Arc<Scope>,
 
+    pub connection: BoxedStream,
+
     pub request_layer: Arc<BoxLayer<crate::Request>>,
     pub response_layer: Arc<BoxLayer<Response>>,
 }
@@ -217,12 +224,14 @@ where
                     Action::Respond(mut r) => {
                         self.response_layer.execute(&mut r);
 
-                        self.responder.respond(r).unwrap();
+                        let _ = self.responder.respond(r);
 
                         return;
                     }
                     Action::Handle(f) => {
-                        todo!("implement upgrade for `Connection`");
+                        f(self.connection);
+
+                        return;
                     }
                     Action::None => {}
                 }

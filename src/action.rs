@@ -1,8 +1,6 @@
-use std::net::TcpStream;
-
 use http::{Response, Version};
 
-use crate::{connection::Connection, http_utils::IntoRawBytes};
+use crate::{http_utils::IntoRawBytes, connection::BoxedStream};
 
 pub type RawResponse = Response<Vec<u8>>;
 
@@ -14,7 +12,7 @@ pub trait IntoResponse {
 
 pub enum Action {
     Respond(RawResponse),
-    Handle(fn(TcpStream)),
+    Handle(fn(BoxedStream)),
     None,
 }
 

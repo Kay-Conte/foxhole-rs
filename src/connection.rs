@@ -21,7 +21,7 @@ pub trait BoxedStreamMarker: Read + Write + BoxedTryClone + SetTimeout + Send + 
 
 impl<T> BoxedStreamMarker for T where T: Read + Write + BoxedTryClone + SetTimeout + Send + Sync {}
 
-type BoxedStream = Box<dyn BoxedStreamMarker>;
+pub type BoxedStream = Box<dyn BoxedStreamMarker>;
 
 /// A trait providing a `set_timeout` function for streams
 pub trait SetTimeout {
@@ -74,6 +74,8 @@ pub trait Connection: Sized + Send {
     /// Reading of the body of the previous frame may occur on subsequent calls depending on
     /// implementation
     fn next_frame(&mut self) -> Result<(Request<Self::Body>, Self::Responder), std::io::Error>;
+
+    fn try_clone_inner(&self) -> std::io::Result<BoxedStream>;
 }
 
 /// A trait providing necessary functionality to respond to a connection
@@ -166,6 +168,10 @@ impl Connection for Http1 {
         self.unfinished = Some((body_len, sender));
 
         Ok((req.map(|_| lazy), self.next_writer()?))
+    }
+
+    fn try_clone_inner(&self) -> std::io::Result<BoxedStream> {
+        self.conn.try_clone()
     }
 }
 
