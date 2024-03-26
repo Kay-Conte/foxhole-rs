@@ -1,9 +1,12 @@
-use std::io::ErrorKind;
+use std::{io::ErrorKind, time::Duration};
 
 use base64::{engine::general_purpose::STANDARD, Engine};
 use sha1::{Digest, Sha1};
 
-use crate::{action::IntoAction, connection::BoxedStream, Action, Resolve, ResolveGuard};
+use crate::{
+    action::IntoAction, connection::BoxedStream, Action, IntoResponse, Request, Resolve,
+    ResolveGuard, Response,
+};
 
 const GUID: &'static str = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 
@@ -17,9 +20,47 @@ pub(crate) fn encode_key(key: &str) -> String {
     STANDARD.encode(&result)
 }
 
+fn respond_handshake(req: &Request) -> Response {
+    let supports_version = req
+        .headers()
+        .get("sec-websocket-version")
+        .and_then(|i| i.to_str().ok())
+        .and_then(|i| i.split(",").find(|i| i.trim() == "13"))
+        .is_some();
+
+    if !supports_version {
+        return http::Response::builder()
+            .status(426)
+            .header("sec-websocket-version", "13")
+            .body(Vec::new())
+            .unwrap();
+    }
+
+    let Some(key) = req
+        .headers()
+        .get("sec-websocket-key")
+        .and_then(|i| i.to_str().ok())
+    else {
+        return 400u16.response();
+    };
+
+    let accept = encode_key(key);
+
+    http::Response::builder()
+        .status(101)
+        .header("sec-websocket-accept", accept)
+        .header("upgrade", "websocket")
+        .header("connection", "upgrade")
+        .body(Vec::new())
+        .unwrap()
+}
+
+/// Guards on the `connection: upgrade` header. Provides a method of constructing `Websocket`
+/// return value
 pub struct Upgrade;
 
 impl Upgrade {
+    /// Convert this type to a `Websocket`. Return the `Websocket` from a system to handle the connection
     pub fn handle(&self, f: fn(WebsocketConnection)) -> Websocket {
         Websocket(f)
     }
@@ -53,11 +94,10 @@ pub struct Websocket(fn(WebsocketConnection));
 
 impl IntoAction for Websocket {
     fn action(self) -> crate::Action {
-        Action::Upgrade(Box::new(move |stream| {
-            // Create websocket connection type
-            // Call function with connection
-            (self.0)(WebsocketConnection::new(stream))
-        }))
+        Action::Upgrade(
+            respond_handshake,
+            Box::new(move |stream| (self.0)(WebsocketConnection::new(stream))),
+        )
     }
 }
 
@@ -68,15 +108,24 @@ pub enum Frame {
     Close(Option<u16>),
 }
 
+/// Provides framing of a websocket 13 connection.
 pub struct WebsocketConnection {
     inner: BoxedStream,
 }
 
 impl WebsocketConnection {
+    /// Creates a new instance of a `WebsocketConnection`
     pub fn new(stream: BoxedStream) -> Self {
         Self { inner: stream }
     }
 
+    /// Sets the timeout of the underlying stream
+    pub fn set_timeout(&mut self, timeout: Option<Duration>) -> std::io::Result<()> {
+        self.inner.set_timeout(timeout)
+    }
+
+    /// Gets the next websocket frame from the stream. Note: this will error on the default timeout
+    /// of the application unless set otherwise using `set_timeout`
     pub fn next_frame(&mut self) -> std::io::Result<Frame> {
         let mut header_bytes = [0u8; 2];
         self.inner.read_exact(&mut header_bytes)?;

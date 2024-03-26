@@ -4,7 +4,7 @@ use foxhole::{
     App, Http1, Scope,
 };
 
-fn get(upgrade: Upgrade) -> Websocket {
+fn upgrade(upgrade: Upgrade) -> Websocket {
     println!("Running");
     upgrade.handle(|mut ws| loop {
         match ws.next_frame() {
@@ -15,7 +15,7 @@ fn get(upgrade: Upgrade) -> Websocket {
 }
 
 fn main() {
-    let scope = Scope::new(sys![get]);
+    let scope = Scope::new(sys![upgrade]);
 
     println!("Running on '127.0.0.1:8080'");
 

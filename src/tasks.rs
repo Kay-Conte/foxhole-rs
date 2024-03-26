@@ -18,7 +18,6 @@ use crate::{
     get_as_slice::GetAsSlice,
     layers::BoxLayer,
     type_cache::TypeCache,
-    websocket::encode_key,
     Action, IntoResponse, Response, Scope,
 };
 
@@ -141,18 +140,16 @@ pub(crate) struct SecuredConnectionTask<C> {
 #[cfg(feature = "tls")]
 impl<C> Task for SecuredConnectionTask<C>
 where
-    C: Connection,
+    C: 'static + Connection,
 {
     fn run(mut self: Box<Self>) {
         let Ok(mut connection) = ServerConnection::new(self.tls_config.clone()) else {
-            println!("Err");
             return;
         };
 
         match connection.complete_io(&mut self.stream) {
             Ok(_) => {}
-            Err(e) => {
-                println!("{}", e);
+            Err(_) => {
                 return;
             }
         };
@@ -165,7 +162,7 @@ where
         };
 
         connection
-            .set_read_timeout(Some(Duration::from_secs(TIMEOUT)))
+            .set_timeout(Some(Duration::from_secs(TIMEOUT)))
             .expect("Shouldn't fail unless duration is 0");
 
         while let Ok((request, responder)) = connection.next_frame() {
@@ -175,20 +172,39 @@ where
                 b
             });
 
-            if let Some(header) = r.headers().get("connection") {
+            let mut should_close: bool = true;
+
+            if let Some(header) = r.headers().get("connection").and_then(|i| i.to_str().ok()) {
+                if header.to_lowercase() == "upgrade" {
+                    self.task_pool.send_task(RequestTask {
+                        cache: self.cache.clone(),
+                        upgrade: Some(connection),
+                        request: r,
+                        responder,
+                        router: self.router.clone(),
+                        request_layer: self.request_layer.clone(),
+                        response_layer: self.response_layer.clone(),
+                    });
+
+                    break;
+                }
+
                 should_close = header != "keep-alive";
-            } else {
-                should_close = true
             }
 
-            self.task_pool.send_task(RequestTask {
+            self.task_pool.send_task(RequestTask::<_, C> {
                 cache: self.cache.clone(),
+                upgrade: None,
                 request: r,
                 responder,
                 router: self.router.clone(),
                 request_layer: self.request_layer.clone(),
                 response_layer: self.response_layer.clone(),
             });
+
+            if should_close {
+                break;
+            }
         }
     }
 }
@@ -241,53 +257,14 @@ where
 
                         return;
                     }
-                    Action::Upgrade(f) => {
+                    Action::Upgrade(r, f) => {
                         // Todo move this handling to the constructor of `Action::Upgrade`
                         let Some(connection) = self.upgrade else {
-                            println!("no connection");
                             return;
                         };
 
-                        let supports_version = ctx
-                            .request
-                            .headers()
-                            .get("sec-websocket-version")
-                            .and_then(|i| i.to_str().ok())
-                            .and_then(|i| i.split(",").find(|i| i.trim() == "13"))
-                            .is_some();
-
-                        if !supports_version {
-                            let _ = self.responder.respond(
-                                http::Response::builder()
-                                    .status(426)
-                                    .header("sec-websocket-version", "13")
-                                    .body(Vec::new())
-                                    .unwrap(),
-                            );
-
-                            return;
-                        }
-
-                        let Some(key) = ctx
-                            .request
-                            .headers()
-                            .get("sec-websocket-key")
-                            .and_then(|i| i.to_str().ok())
-                        else {
-                            return;
-                        };
-
-                        let accept = encode_key(key);
-
-                        let _ = self.responder.respond(
-                            http::Response::builder()
-                                .status(101)
-                                .header("sec-websocket-accept", accept)
-                                .header("upgrade", "websocket")
-                                .header("connection", "upgrade")
-                                .body(Vec::new())
-                                .unwrap(),
-                        );
+                        let response = r(&ctx.request);
+                        let _ = self.responder.respond(response);
 
                         f(connection.upgrade());
 

@@ -1,6 +1,6 @@
 use http::{Response, Version};
 
-use crate::{connection::BoxedStream, http_utils::IntoRawBytes};
+use crate::{connection::BoxedStream, http_utils::IntoRawBytes, Request};
 
 pub type RawResponse = Response<Vec<u8>>;
 
@@ -12,7 +12,7 @@ pub trait IntoResponse {
 
 pub enum Action {
     Respond(RawResponse),
-    Upgrade(Box<dyn Fn(BoxedStream)>),
+    Upgrade(fn(&Request) -> crate::Response, Box<dyn Fn(BoxedStream)>),
     None,
 }
 
