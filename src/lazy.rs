@@ -25,7 +25,7 @@ impl Lazy<Vec<u8>> {
     }
 
     /// This call blocks until the body has been read from the `TcpStream`
-    pub fn get<'a>(&'a self) -> &[u8] {
+    pub fn get(&self) -> &[u8] {
         self.value.get_or_init(|| self.receiver.recv().unwrap())
     }
 }
