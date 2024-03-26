@@ -18,7 +18,7 @@ use crate::{
     get_as_slice::GetAsSlice,
     layers::BoxLayer,
     type_cache::TypeCache,
-    IntoResponse, Response, Scope,
+    Action, IntoResponse, Response, Scope,
 };
 
 #[cfg(feature = "tls")]
@@ -82,6 +82,12 @@ where
                 b
             });
 
+            let should_close = if let Some(header) = r.headers().get("connection") {
+                header != "keep-alive"
+            } else {
+                true
+            };
+
             self.task_pool.send_task(RequestTask {
                 cache: self.cache.clone(),
                 request: r,
@@ -90,6 +96,10 @@ where
                 request_layer: self.request_layer.clone(),
                 response_layer: self.response_layer.clone(),
             });
+
+            if should_close {
+                break;
+            }
         }
     }
 }
@@ -108,7 +118,6 @@ pub(crate) struct SecuredConnectionTask<C> {
 
     pub request_layer: Arc<BoxLayer<crate::Request>>,
     pub response_layer: Arc<BoxLayer<Response>>,
-
 
     pub phantom_data: PhantomData<C>,
 }
@@ -149,6 +158,12 @@ where
 
                 b
             });
+
+            if let Some(header) = r.headers().get("connection") {
+                should_close = header != "keep-alive";
+            } else {
+                should_close = true
+            }
 
             self.task_pool.send_task(RequestTask {
                 cache: self.cache.clone(),
@@ -198,12 +213,18 @@ where
 
         loop {
             for system in cursor.systems() {
-                if let Some(mut r) = system.call(&ctx, &mut path_iter) {
-                    self.response_layer.execute(&mut r);
+                match system.call(&ctx, &mut path_iter) {
+                    Action::Respond(mut r) => {
+                        self.response_layer.execute(&mut r);
 
-                    self.responder.respond(r).unwrap();
+                        self.responder.respond(r).unwrap();
 
-                    return;
+                        return;
+                    }
+                    Action::Handle(f) => {
+                        todo!("implement upgrade for `Connection`");
+                    }
+                    Action::None => {}
                 }
             }
 

@@ -1,6 +1,8 @@
+use std::net::TcpStream;
+
 use http::{Response, Version};
 
-use crate::http_utils::IntoRawBytes;
+use crate::{connection::Connection, http_utils::IntoRawBytes};
 
 pub type RawResponse = Response<Vec<u8>>;
 
@@ -10,52 +12,64 @@ pub trait IntoResponse {
     fn response(self) -> RawResponse;
 }
 
-/// All `System`s must return a type implementing `Action`. This trait decides the
-/// behaviour of the underlying router. If this method returns `None` the router will
-/// continue. If it receives `Some` value, it will respond to the connection and stop routing.
-pub trait Action {
-    fn action(self) -> Option<RawResponse>;
+pub enum Action {
+    Respond(RawResponse),
+    Handle(fn(TcpStream)),
+    None,
 }
 
-impl<T> Action for T
+/// All `System`s must return a type implementing `Action`. This trait decides the
+/// behaviour of the underlying router.
+/// - `Action::None` The router will continue to the next system
+/// - `Action::Respond` The router will respond immediately. No subsequent systems will be run
+/// - `Action::Handle` The task will transfer ownership of the stream to the fn. No subsequent
+/// systems will be run
+pub trait IntoAction {
+    fn action(self) -> Action;
+}
+
+impl<T> IntoAction for T
 where
     T: IntoResponse,
 {
-    fn action(self) -> Option<RawResponse> {
-        Some(self.response())
+    fn action(self) -> Action {
+        Action::Respond(self.response())
     }
 }
 
-impl<T> Action for Response<T>
+impl<T> IntoAction for Response<T>
 where
     T: IntoRawBytes,
 {
-    fn action(self) -> Option<RawResponse> {
-        Some(self.map(IntoRawBytes::into_raw_bytes))
+    fn action(self) -> Action {
+        Action::Respond(self.map(IntoRawBytes::into_raw_bytes))
     }
 }
 
-impl Action for () {
-    fn action(self) -> Option<RawResponse> {
-        None
+impl IntoAction for () {
+    fn action(self) -> Action {
+        Action::None
     }
 }
 
-impl<T> Action for Option<T>
+impl<T> IntoAction for Option<T>
 where
-    T: Action,
+    T: IntoAction,
 {
-    fn action(self) -> Option<RawResponse> {
-        self.and_then(Action::action)
+    fn action(self) -> Action {
+        match self {
+            Some(v) => v.action(),
+            None => Action::None,
+        }
     }
 }
 
-impl<T, E> Action for Result<T, E>
+impl<T, E> IntoAction for Result<T, E>
 where
-    T: Action,
-    E: Action,
+    T: IntoAction,
+    E: IntoAction,
 {
-    fn action(self) -> Option<RawResponse> {
+    fn action(self) -> Action {
         match self {
             Ok(v) => v.action(),
             Err(e) => e.action(),

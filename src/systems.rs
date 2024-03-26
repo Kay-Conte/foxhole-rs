@@ -1,18 +1,17 @@
 use crate::{
-    action::Action,
-    action::RawResponse,
+    action::{Action, IntoAction},
     resolve::{Resolve, ResolveGuard},
     tasks::{PathIter, RequestState},
 };
 
 #[doc(hidden)]
 pub trait System<'a, T> {
-    fn run(self, ctx: &'a RequestState, path_iter: &mut PathIter) -> Option<RawResponse>;
+    fn run(self, ctx: &'a RequestState, path_iter: &mut PathIter) -> Action;
 }
 
 #[doc(hidden)]
 pub struct DynSystem {
-    inner: Box<dyn Fn(&RequestState, &mut PathIter) -> Option<RawResponse> + 'static + Send + Sync>,
+    inner: Box<dyn Fn(&RequestState, &mut PathIter) -> Action + 'static + Send + Sync>,
 }
 
 impl DynSystem {
@@ -22,7 +21,7 @@ impl DynSystem {
         }
     }
 
-    pub fn call(&self, ctx: &RequestState, path_iter: &mut PathIter) -> Option<RawResponse> {
+    pub fn call(&self, ctx: &RequestState, path_iter: &mut PathIter) -> Action {
         (self.inner)(ctx, path_iter)
     }
 }
@@ -33,18 +32,18 @@ macro_rules! system {
         where
             BASE: Fn($($x,)*) -> RESPONSE + Fn($($x::Output,)*) -> RESPONSE,
             $($x: Resolve<'a>,)*
-            RESPONSE: Action,
+            RESPONSE: IntoAction,
         {
             #[allow(unused)]
-            fn run(self, ctx: &'a RequestState, path_iter: &mut PathIter) -> Option<RawResponse> {
+            fn run(self, ctx: &'a RequestState, path_iter: &mut PathIter) -> Action {
 
 
                 $(
                 #[allow(non_snake_case)]
                 let $x = match $x::resolve(ctx, path_iter) {
                     ResolveGuard::Value(v) => v,
-                    ResolveGuard::None => return None,
-                    ResolveGuard::Respond(r) => return Some(r), };)*
+                    ResolveGuard::None => return Action::None,
+                    ResolveGuard::Respond(r) => return Action::Respond(r), };)*
 
                 let r = self($($x,)*);
 

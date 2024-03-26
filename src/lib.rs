@@ -17,6 +17,8 @@ pub mod routing;
 pub mod systems;
 pub mod type_cache;
 
+pub mod websocket;
+
 pub use action::{Action, IntoResponse};
 pub use connection::Http1;
 pub use framework::App;
