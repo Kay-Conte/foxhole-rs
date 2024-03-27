@@ -7,10 +7,15 @@ use foxhole::{
 
 #[cfg(feature = "websocket")]
 fn upgrade(upgrade: Upgrade) -> Websocket {
+    use std::io::ErrorKind;
+
     upgrade.handle(|mut ws| loop {
         match ws.next_frame() {
-            Ok(v) => println!("{:?}", v),
-            Err(e) => println!("{e:?}"),
+            Ok(v) => {
+                let _ = ws.send(v);
+            }
+            Err(e) if e.kind() == ErrorKind::WouldBlock => {}
+            Err(_) => return,
         }
     })
 }
@@ -26,5 +31,5 @@ fn main() {
 
 #[cfg(not(feature = "websocket"))]
 fn main() {
-    println!("Run with \"--feature websocket\"");
+    println!("Run with \"--features websocket\"");
 }

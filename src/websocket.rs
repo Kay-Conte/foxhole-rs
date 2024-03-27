@@ -187,4 +187,52 @@ impl WebsocketConnection {
             )),
         }
     }
+
+    pub fn write_len(&mut self, len: usize) -> std::io::Result<()> {
+        if len <= 125 {
+            self.inner.write_all(&[len as u8])?
+        } else if len <= 65535 {
+            self.inner.write_all(&[126])?;
+            self.inner.write_all(&len.to_be_bytes())?;
+        } else {
+            return Err(std::io::Error::new(
+                ErrorKind::Other,
+                "Payload length exceeds maximum supported length",
+            ));
+        }
+
+        Ok(())
+    }
+
+    pub fn send(&mut self, frame: Frame) -> std::io::Result<()> {
+        match frame {
+            Frame::Text(data) => {
+                self.inner.write_all(&[0x81])?;
+
+                let payload = data.into_bytes();
+                self.write_len(payload.len())?;
+
+                self.inner.write_all(&payload)?;
+            }
+            Frame::Binary(data) => {
+                self.inner.write_all(&[0x82])?;
+
+                self.write_len(data.len())?;
+
+                self.inner.write_all(&data)?;
+            }
+            Frame::Close(code) => {
+                self.inner.write_all(&[0x88])?;
+
+                if let Some(code) = code {
+                    self.inner.write_all(&[2])?;
+                    self.inner.write_all(&code.to_be_bytes())?;
+                } else {
+                    self.inner.write_all(&[0])?;
+                }
+            }
+        }
+
+        Ok(())
+    }
 }
