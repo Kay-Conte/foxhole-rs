@@ -7,7 +7,6 @@ use foxhole::{
 
 #[cfg(feature = "websocket")]
 fn upgrade(upgrade: Upgrade) -> Websocket {
-    println!("Running");
     upgrade.handle(|mut ws| loop {
         match ws.next_frame() {
             Ok(v) => println!("{:?}", v),
