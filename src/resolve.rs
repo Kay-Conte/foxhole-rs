@@ -99,6 +99,17 @@ impl<'a> Resolve<'a> for UrlCollect {
     }
 }
 
+/// A case insensitive `HashMap` of headers
+pub struct HeaderMap<'a>(&'a http::HeaderMap);
+
+impl<'a, 'b> Resolve<'a> for HeaderMap<'b> {
+    type Output = HeaderMap<'a>;
+
+    fn resolve(ctx: &'a RequestState, _captures: &mut Captures) -> ResolveGuard<Self::Output> {
+        ResolveGuard::Value(HeaderMap(ctx.request.headers()))
+    }
+}
+
 impl<'a, 'b> Resolve<'a> for &'b [u8] {
     type Output = &'a [u8];
 
