@@ -5,10 +5,7 @@ use crate::{action::RawResponse, routing::Captures, type_cache::TypeCacheKey, Re
 pub trait Resolve<'a>: Sized {
     type Output: 'a;
 
-    fn resolve(
-        ctx: &'a RequestState,
-        captures: &mut Captures,
-    ) -> ResolveGuard<Self::Output>;
+    fn resolve(ctx: &'a RequestState, captures: &mut Captures) -> ResolveGuard<Self::Output>;
 }
 
 /// `ResolveGuard` is the expected return type of top level `Resolve`able objects. Only types that
@@ -41,26 +38,35 @@ impl<T> ResolveGuard<T> {
     }
 }
 
-/// "Query" a value from the global_cache of the `RequestState` and clone it.
-pub struct Query<K>(pub K::Value)
+/// "Query" a value from the global_cache of the `RequestState`
+pub struct Query<'a, K>(pub &'a K::Value)
 where
     K: TypeCacheKey;
 
-impl<'a, K> Resolve<'a> for Query<K>
+impl<'a, 'b, K> Resolve<'b> for Query<'a, K>
 where
     K: TypeCacheKey,
-    K::Value: Clone,
 {
-    type Output = Self;
+    type Output = Query<'b, K>;
 
-    fn resolve(ctx: &'a RequestState, _captures: &mut Captures) -> ResolveGuard<Self> {
-        ctx.global_cache.get::<K>().map(|v| Query(v.clone())).into()
+    fn resolve(ctx: &'b RequestState, _captures: &mut Captures) -> ResolveGuard<Self::Output> {
+        ctx.global_cache.get::<K>().map(|v| Query(v)).into()
     }
 }
 
-/// Consumes the next part of the url `path_iter`. Note that this will happen on call to its
-/// `resolve` method so ordering of parameters matter. Place any necessary guards before this
-/// method.
+/// Returns a reference to the path of the request.
+pub struct Url<'a>(&'a str);
+
+impl<'a, 'b> Resolve<'b> for Url<'a> {
+    type Output = Url<'b>;
+
+    fn resolve(ctx: &'b RequestState, _captures: &mut Captures) -> ResolveGuard<Self::Output> {
+        ResolveGuard::Value(Url(ctx.request.uri().path()))
+    }
+}
+
+/// Consumes the next part of the capture group. The capture group will be set in the same order it
+/// is defined in the route url.
 pub struct UrlPart(pub String);
 
 impl<'a> Resolve<'a> for UrlPart {
@@ -75,9 +81,8 @@ impl<'a> Resolve<'a> for UrlPart {
     }
 }
 
-/// Collect the entire remaining url into a `Vec` Note that this will happen on call to its
-/// `resolve` method so ordering of parameters matter. Place any necessary guards before this
-/// method.
+/// Consumes all parts of the capture group. The capture group will be set in the same order it is
+/// defined in the route url.
 pub struct UrlCollect(pub Vec<String>);
 
 impl<'a> Resolve<'a> for UrlCollect {
@@ -97,10 +102,7 @@ impl<'a> Resolve<'a> for UrlCollect {
 impl<'a, 'b> Resolve<'a> for &'b [u8] {
     type Output = &'a [u8];
 
-    fn resolve(
-        ctx: &'a RequestState,
-        _captures: &mut Captures,
-    ) -> ResolveGuard<Self::Output> {
+    fn resolve(ctx: &'a RequestState, _captures: &mut Captures) -> ResolveGuard<Self::Output> {
         ResolveGuard::Value(ctx.request.body().get_as_slice())
     }
 }
@@ -108,10 +110,7 @@ impl<'a, 'b> Resolve<'a> for &'b [u8] {
 impl<'a, 'b> Resolve<'a> for &'b str {
     type Output = &'a str;
 
-    fn resolve(
-        ctx: &'a RequestState,
-        _captures: &mut Captures,
-    ) -> ResolveGuard<Self::Output> {
+    fn resolve(ctx: &'a RequestState, _captures: &mut Captures) -> ResolveGuard<Self::Output> {
         std::str::from_utf8(ctx.request.body().get_as_slice())
             .ok()
             .into()
