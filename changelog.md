@@ -4,6 +4,8 @@
 - New `Router` type and implementation
 - Fallback handler on `Router`
 - Websocket support under feature flag `websocket`
+- Resolvable types:
+  - `Url`
 
 ### Removed
 - All method guards, use `foxhole::Method` now in combination with the new `Router
