@@ -74,8 +74,6 @@ impl Router {
             } else {
                 cursor.children.push((Pattern::new(segment), Node::new()));
 
-                println!("{}", cursor.children.len());
-
                 cursor = cursor.children.last_mut().unwrap().1.borrow_mut();
             }
         }

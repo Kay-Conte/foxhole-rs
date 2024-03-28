@@ -1,24 +1,24 @@
 use std::sync::{Arc, RwLock};
 
 use foxhole::{
-    action::Html, resolve::Query, App, Http1, Method::Get, Router, TypeCache, TypeCacheKey
+    action::Html, resolve::Query, App, Http1, Method::Get, Router, TypeCache, TypeCacheKey,
 };
 
 pub struct Counter(u32);
 
 impl TypeCacheKey for Counter {
-    // This must be an `Arc` otherwise the object will be cloned by the query and changes will
+    // This must be an `Arc` otherwise the object will be cloned by `Query` and changes will
     // not persist
     type Value = Arc<RwLock<Counter>>;
 }
 
 // The value stored inside `Query` is `Counter::Value`
-fn get(counter: Query<Counter>) -> Html {
-    counter.0.write().unwrap().0 += 1;
+fn get(Query(counter): Query<Counter>) -> Html {
+    counter.write().unwrap().0 += 1;
 
     let page = format!(
         "<h1>This page has been visited {} times!</h1>",
-        counter.0.read().unwrap().0
+        counter.read().unwrap().0
     );
 
     Html(page)

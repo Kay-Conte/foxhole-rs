@@ -28,71 +28,66 @@ Foxhole is a simple, fast, synchronous framework built for finishing your projec
 - Minimal build size, ~500kb when stripped.
 - Uses `http`, a model library you may already be familiar with.
 - Magic function handlers! See [Getting Started](#getting-started).
-- Unique powerful routing system
-- near Full Http1.1 support
+- Powerful routing system
+- Near full Http1.1 support
 - Https support in the works. Available on the under feature "tls". largely Untested!
 - Http2 support coming.
 
 # Getting Started
-Foxhole uses a set of handler systems and routing modules to handle requests and responses.   
+Foxhole uses a set of magic handler systems and traits to simplify handle requests and responses.   
 Here's a starting example of a Hello World server.
 ```rust
-use foxhole::{action::Html, connection::Http1, resolve::Get, App, sys, Scope};
+ use foxhole::{action::Html, App, Http1, Method::Get, Router};
 
-fn get(_get: Get) -> Html {
+fn get() -> Html {
     Html(String::from("<h1> Foxhole! </h1>"))
 }
 
 fn main() {
-    let scope = Scope::new(sys![get]);
+    let scope = Router::new().add_route("/", Get(get));
 
     println!("Running on '127.0.0.1:8080'");
 
     #[cfg(test)]
-    App::builder(scope)
-        .run::<Http1>("127.0.0.1:8080");
-} 
+    App::builder(scope).run::<Http1>("127.0.0.1:8080");
+}
 ```
 
 Let's break this down into its components.
 
-## Routing
-
-The scope tree will step through the url by its parts, first starting with the root. It will try to run **all** systems of every node it steps through in order. Once a response is received it will stop stepping over the url and respond immediately. 
-
-lets assume we have the tree `Scope::new(sys![auth]).route("page", sys![get_page])` and the request `/page`
-
-In this example, the router will first call `auth` at the root of the tree. If `auth` returns a response, say the user is not authorized and we would like to respond early, then we stop there and respond `401`. Otherwise we continue to the next node `get_page`
-
-If no responses are returned by the end of the tree the server will automatically return `404`. This will be configuarable in the future.
-
 ## Parameters/Guards
 
-Function parameters can act as both getters and guards in `foxhole`. 
+Function parameters can act as both getters and guards preventing a system from running in `foxhole`. 
 
-In the example above, `Get` acts as a guard to make sure the system is only run on `GET` requests. 
+Any type that implements the trait `Resolve` is capable of acting as a parameter.
 
-Any type that implements the trait `Resolve` is viable to use as a parameter. 
+`foxhole` will try to provide the most common guards and getters you will use but few are implemented currently.
 
-`foxhole` will try to provide the most common guards and getters you will use but few are implemented currenty.
+The following is basic implementation of `Token` getter.
 
 ### Example
 ```rust
-use foxhole::{http::Method, PathIter, RequestState, resolve::{Resolve, ResolveGuard}};
+use foxhole::{Resolve, ResolveGuard};
 
-pub struct Get;
+struct Token(String);
 
-impl<'a> Resolve<'a> for Get {
+impl<'a> Resolve<'a> for Token {
     type Output = Self;
 
-    fn resolve(ctx: &'a RequestState, _path_iter: &mut PathIter) -> ResolveGuard<Self::Output> {
-        if ctx.request.method() == Method::GET {
-            ResolveGuard::Value(Get)
-        } else {
-            ResolveGuard::None
-        }
+    fn resolve(
+        ctx: &'a foxhole::RequestState,
+        _captures: &mut foxhole::Captures,
+    ) -> ResolveGuard<Self::Output> {
+        let Some(v) = ctx.request.headers().get("authorization") else {
+            return ResolveGuard::None;
+        };
+
+        // You should handle the `Err` case in real code
+        ResolveGuard::Value(Token(v.to_str().unwrap().to_string()))
     }
 }
+
+fn get(Token(_token): Token) { }
 ```
 
 ## Return types
@@ -101,26 +96,30 @@ Systems are required to return a value that implements `Action`.
 
 Additionally note the existence of `IntoResponse` which can be implemented instead for types that are always a response.
 
-If a type returns `None` out of `Action` a response will not be sent and routing will continue to further nodes. This will likely become an extended enum on websocket support.
+If a type returns `None` out of `Action` a response will not be sent and routing will continue to the fallback. On failure of the fallback, a 500 will be sent to the client.
 
 ### Example
 ```rust
-use foxhole::{http::Version, IntoResponse, Response};
+use foxhole::IntoResponse;
 
-pub struct Html(pub String);
+// This is a reimplementation of the provided `Html` type.
+struct Html(String);
 
 impl IntoResponse for Html {
-    fn response(self) -> Response {
+    fn response(self) -> http::Response<Vec<u8>> {
         let bytes = self.0.into_bytes();
 
         http::Response::builder()
-            .version(Version::HTTP_11)
             .status(200)
             .header("Content-Type", "text/html; charset=utf-8")
             .header("Content-Length", format!("{}", bytes.len()))
             .body(bytes)
             .unwrap()
     }
+}
+
+fn page() -> Html {
+    Html("<h1> Hey Friend </h1>".to_string())
 }
 ```
  

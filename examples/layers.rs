@@ -11,7 +11,7 @@ impl Layer<Request> for Logger {
     }
 }
 
-// This implementation will run right before sending to the client.
+// This implementation will run right before responding to the client.
 impl Layer<Response> for Logger {
     fn execute(&self, data: &mut Response) {
         println!("Response: {:?}", data);
