@@ -1,8 +1,4 @@
-use foxhole::{
-    Http1,
-    resolve::{Endpoint, Get},
-    IntoResponse, Scope, App, sys
-};
+use foxhole::{App, Http1, IntoResponse, Method::Get, Router};
 
 // This is a reimplementation of the provided `Html` type.
 struct Html(String);
@@ -20,22 +16,19 @@ impl IntoResponse for Html {
     }
 }
 
-fn page(_get: Get, _e: Endpoint) -> Html {
+fn page() -> Html {
     Html("<h1> Hey Friend </h1>".to_string())
 }
 
-fn favicon(_get: Get, _e: Endpoint) -> u16 {
+fn favicon() -> u16 {
     println!("No favicon yet :C");
     404
 }
 
 fn main() {
-    let scope = Scope::empty()
-        .route("favicon.ico", sys![favicon])
-        .route("page", sys![page]);
+    let router = Router::new().add_route("/page", Get(page)).add_route("/favicon", Get(favicon));
 
     println!("Try connecting from a browser at 'http://localhost:8080/page'");
 
-    App::builder(scope)
-        .run::<Http1>("127.0.0.1:8080");
+    App::builder(router).run::<Http1>("127.0.0.1:8080");
 }

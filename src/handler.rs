@@ -4,7 +4,16 @@ use crate::systems::{DynSystem, IntoDynSystem};
 
 pub enum Method<T> {
     Get(T),
-    Post(T)
+    Post(T),
+}
+
+impl<T> Method<T> {
+    pub(crate) fn inner(self) -> (http::Method, T) {
+        match self {
+            Method::Get(v) => (http::Method::GET, v),
+            Method::Post(v) => (http::Method::POST, v),
+        }
+    }
 }
 
 pub struct Handler {
@@ -20,6 +29,10 @@ impl Handler {
 
     pub(crate) fn insert(&mut self, method: http::Method, system: DynSystem) {
         self.methods.insert(method, system);
+    }
+
+    pub(crate) fn get(&self, method: &http::Method) -> Option<&DynSystem> {
+        self.methods.get(method)
     }
 }
 
@@ -37,10 +50,11 @@ macro_rules! handler {
                 #[allow(non_snake_case)]
                 let ($($x),*) = self;
 
-                $(match $x {
-                    Method::Get(v) => handler.insert(http::Method::GET, v.into_dyn_system()),
-                    _ => {}
-                })*
+                $(
+                    let (method, system) = $x.inner();
+
+                    handler.insert(method, system.into_dyn_system());
+                )*
             }
         }
     }

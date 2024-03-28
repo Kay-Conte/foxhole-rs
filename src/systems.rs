@@ -1,32 +1,30 @@
-use std::collections::HashMap;
-
-use http::Method;
-
 use crate::{
     action::{Action, IntoAction},
     resolve::{Resolve, ResolveGuard},
-    tasks::{PathIter, RequestState},
+    tasks::RequestState,
 };
+
+use std::collections::VecDeque;
 
 #[doc(hidden)]
 pub trait System<'a, T> {
-    fn run(self, ctx: &'a RequestState, path_iter: &mut PathIter) -> Action;
+    fn run(self, ctx: &'a RequestState, captures: VecDeque<String>) -> Action;
 }
 
 #[doc(hidden)]
 pub struct DynSystem {
-    inner: Box<dyn Fn(&RequestState, &mut PathIter) -> Action + 'static + Send + Sync>,
+    inner: Box<dyn Fn(&RequestState, VecDeque<String>) -> Action + 'static + Send + Sync>,
 }
 
 impl DynSystem {
     pub fn new<A>(system: impl for<'a> System<'a, A> + 'static + Send + Sync + Copy) -> Self {
         DynSystem {
-            inner: Box::new(move |ctx, path_iter| system.run(ctx, path_iter)),
+            inner: Box::new(move |ctx, captures| system.run(ctx, captures)),
         }
     }
 
-    pub fn call(&self, ctx: &RequestState, path_iter: &mut PathIter) -> Action {
-        (self.inner)(ctx, path_iter)
+    pub fn call(&self, ctx: &RequestState, captures: VecDeque<String>) -> Action {
+        (self.inner)(ctx, captures)
     }
 }
 
@@ -44,8 +42,6 @@ where
     }
 }
 
-
-
 macro_rules! system {
     ($($x:ident),* $(,)?) => {
         impl<'a, RESPONSE, $($x,)* BASE> System<'a, (RESPONSE, $($x,)*)> for BASE
@@ -55,12 +51,12 @@ macro_rules! system {
             RESPONSE: IntoAction,
         {
             #[allow(unused)]
-            fn run(self, ctx: &'a RequestState, path_iter: &mut PathIter) -> Action {
+            fn run(self, mut ctx: &'a RequestState, mut captures: VecDeque<String>) -> Action {
 
 
                 $(
                 #[allow(non_snake_case)]
-                let $x = match $x::resolve(ctx, path_iter) {
+                let $x = match $x::resolve(&ctx, &mut captures) {
                     ResolveGuard::Value(v) => v,
                     ResolveGuard::None => return Action::None,
                     ResolveGuard::Respond(r) => return Action::Respond(r), };)*
@@ -86,4 +82,3 @@ macro_rules! system_all {
 }
 
 system_all! { A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P, Q, R, S, T, U, V, W, X, Y, Z }
-

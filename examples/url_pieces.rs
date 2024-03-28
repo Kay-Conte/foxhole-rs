@@ -1,7 +1,5 @@
 use foxhole::{
-    Http1,
-    resolve::{Endpoint, Get, UrlCollect, UrlPart},
-    sys, App, IntoRawBytes, IntoResponse, Scope,
+    resolve::{UrlCollect, UrlPart}, App, Http1, IntoRawBytes, IntoResponse, Method::Get, Router
 };
 
 pub struct User(String);
@@ -19,22 +17,20 @@ impl IntoResponse for User {
     }
 }
 
-// Having `Endpoint` as a parameter after `UrlPart` ensures that there is only one trailing url
-// part in the url` This function will consume the next part regardless so be careful.
-fn user(_g: Get, part: UrlPart, _e: Endpoint) -> User {
-    User(part.0)
+fn user(UrlPart(part): UrlPart) -> User {
+    User(part)
 }
 
-fn collect(_g: Get, collect: UrlCollect) -> Option<User> {
-    collect.0.into_iter().next().map(|i| User(i))
+fn collect(UrlCollect(after): UrlCollect) -> Option<User> {
+    Some(User(after.join("")))
 }
 
 fn main() {
-    let scope = Scope::empty()
-        .route("user", sys![user])
-        .route("chained", sys![collect]);
+    let router = Router::new()
+        .add_route("/user/:username", Get(user))
+        .add_route("/collect/*", Get(collect));
 
     println!("Try connecting on a browser at 'http://localhost:8080/user/USERNAME'");
 
-    App::builder(scope).run::<Http1>("0.0.0.0:8080");
+    App::builder(router).run::<Http1>("0.0.0.0:8080");
 }

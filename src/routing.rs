@@ -1,50 +1,8 @@
-use std::{borrow::BorrowMut, collections::HashMap};
+use std::{borrow::BorrowMut, collections::VecDeque};
 
-use crate::{handler::{Handler, InsertHandler}, systems::DynSystem};
+use crate::handler::{Handler, InsertHandler};
 
-/// A Node in the Router tree.
-pub struct Scope {
-    children: HashMap<String, Scope>,
-    systems: Vec<DynSystem>,
-}
-
-impl Scope {
-    /// Construct a new `Scope`
-    pub fn new(systems: Vec<DynSystem>) -> Self {
-        Self {
-            children: HashMap::new(),
-            systems,
-        }
-    }
-
-    /// Construct an empty `Scope`
-    pub fn empty() -> Self {
-        Scope::new(vec![])
-    }
-
-    /// Add a `Scope` as a child of this node
-    pub fn route(mut self, path: impl Into<String>, route: impl Into<Scope>) -> Self {
-        self.children.insert(path.into(), route.into());
-
-        self
-    }
-
-    /// Access the list of systems associated with this node
-    pub fn systems(&self) -> &[DynSystem] {
-        &self.systems
-    }
-
-    /// Scope to a child of this node by path
-    pub fn get_child<'a>(&'a self, path: &str) -> Option<&'a Scope> {
-        self.children.get(path)
-    }
-}
-
-impl From<Vec<DynSystem>> for Scope {
-    fn from(value: Vec<DynSystem>) -> Self {
-        Scope::new(value)
-    }
-}
+pub type Captures = VecDeque<String>;
 
 struct Node {
     handler: Option<Handler>,
@@ -123,7 +81,7 @@ impl Router {
         self
     }
 
-    pub fn route(&self, path: &str) -> Option<(&Handler, Vec<String>)> {
+    pub(crate) fn route(&self, path: &str) -> Option<(&Handler, Captures)> {
         let mut captured = vec![];
 
         let mut cursor = &self.root;
@@ -134,17 +92,22 @@ impl Router {
                 continue;
             }
 
+            let mut matched = false;
+
             for (pattern, node) in cursor.children.iter() {
                 match pattern {
                     Pattern::Exact(s) if s == segment => {
                         cursor = &node;
 
+                        matched = true;
                         break;
                     }
                     Pattern::Capture => {
                         captured.push(segment.to_string());
 
                         cursor = node;
+
+                        matched = true;
                         break;
                     }
                     Pattern::Collect => {
@@ -155,11 +118,20 @@ impl Router {
 
                         break 'outer;
                     }
-                    _ => {}
+                    _ => { },
                 }
+                
+
+            }
+
+            if !matched {
+                return None;
             }
         }
 
-        cursor.handler.as_ref().map(|i| (i, captured))
+        cursor
+            .handler
+            .as_ref()
+            .map(|i| (i, VecDeque::from(captured)))
     }
 }

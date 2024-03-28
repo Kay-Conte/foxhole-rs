@@ -1,11 +1,10 @@
 #![doc = include_str!("../README.md")]
 
+mod handler;
 mod lazy;
 mod sequential_writer;
 mod tasks;
 mod tls_connection;
-
-pub mod handler;
 
 pub mod action;
 pub mod connection;
@@ -13,7 +12,6 @@ pub mod framework;
 pub mod get_as_slice;
 pub mod http_utils;
 pub mod layers;
-pub mod macros;
 pub mod resolve;
 pub mod routing;
 pub mod systems;
@@ -25,11 +23,13 @@ pub mod websocket;
 pub use action::{Action, IntoResponse};
 pub use connection::Http1;
 pub use framework::App;
+pub use handler::Method::{self, *};
 pub use http_utils::IntoRawBytes;
 pub use layers::{DefaultResponseGroup, Layer};
 pub use resolve::{Resolve, ResolveGuard};
-pub use routing::Scope;
-pub use tasks::{PathIter, RequestState};
+pub use routing::Captures;
+pub use routing::Router;
+pub use tasks::RequestState;
 pub use type_cache::{TypeCache, TypeCacheKey};
 
 pub use http;

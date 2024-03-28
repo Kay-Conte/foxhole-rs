@@ -1,4 +1,4 @@
-use std::{io::ErrorKind, time::Duration};
+use std::{collections::VecDeque, io::ErrorKind, time::Duration};
 
 use base64::{engine::general_purpose::STANDARD, Engine};
 use sha1::{Digest, Sha1};
@@ -71,7 +71,7 @@ impl<'a> Resolve<'a> for Upgrade {
 
     fn resolve(
         ctx: &'a crate::RequestState,
-        _path_iter: &mut crate::PathIter,
+        _captures: &mut VecDeque<String>,
     ) -> crate::ResolveGuard<Self::Output> {
         let Some(header) = ctx
             .request

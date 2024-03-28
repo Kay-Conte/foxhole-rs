@@ -7,12 +7,7 @@ use std::{
 };
 
 use crate::{
-    connection::Connection,
-    layers::{BoxLayer, DefaultResponseGroup, Layer},
-    routing::Scope,
-    tasks::TaskPool,
-    type_cache::TypeCache,
-    Request, Response,
+    connection::Connection, layers::{BoxLayer, DefaultResponseGroup, Layer}, routing::Router, tasks::TaskPool, type_cache::TypeCache, Request, Response
 };
 
 #[cfg(not(feature = "tls"))]
@@ -26,7 +21,7 @@ use rustls::ServerConfig;
 
 /// Main application entry point. Construct this type to run your application.
 pub struct App {
-    tree: Scope,
+    router: Router,
     request_layer: BoxLayer<Request>,
     response_layer: BoxLayer<Response>,
     type_cache: TypeCache,
@@ -37,9 +32,9 @@ pub struct App {
 
 impl App {
     /// Constructs a new application
-    pub fn builder(scope: impl Into<Scope>) -> Self {
+    pub fn builder(scope: Router) -> Self {
         Self {
-            tree: scope.into(),
+            router: scope.into(),
             request_layer: Box::new(()),
             response_layer: Box::new(DefaultResponseGroup::new()),
             type_cache: TypeCache::new(),
@@ -81,7 +76,7 @@ impl App {
         let incoming = TcpListener::bind(address).expect("Could not bind to local address");
 
         let type_cache = Arc::new(self.type_cache);
-        let router = Arc::new(self.tree);
+        let router = Arc::new(self.router);
         let request_layer = Arc::new(self.request_layer);
         let response_layer = Arc::new(self.response_layer);
 

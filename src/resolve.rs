@@ -1,13 +1,14 @@
-use http::Method;
-
-use crate::{action::RawResponse, type_cache::TypeCacheKey, PathIter, RequestState};
+use crate::{action::RawResponse, routing::Captures, type_cache::TypeCacheKey, RequestState};
 
 /// `Resolve` is a trait used to construct values needed to call a given `System`. All parameters
 /// of a `System` must implement `Resolve` to be valid.
 pub trait Resolve<'a>: Sized {
     type Output: 'a;
 
-    fn resolve(ctx: &'a RequestState, path_iter: &mut PathIter) -> ResolveGuard<Self::Output>;
+    fn resolve(
+        ctx: &'a RequestState,
+        captures: &mut Captures,
+    ) -> ResolveGuard<Self::Output>;
 }
 
 /// `ResolveGuard` is the expected return type of top level `Resolve`able objects. Only types that
@@ -40,38 +41,6 @@ impl<T> ResolveGuard<T> {
     }
 }
 
-/// Get request guard. A system with this as a parameter requires that the method be GET in order
-/// to run.
-pub struct Get;
-
-impl<'a> Resolve<'a> for Get {
-    type Output = Self;
-
-    fn resolve(ctx: &'a RequestState, _path_iter: &mut PathIter) -> ResolveGuard<Self> {
-        if ctx.request.method() == Method::GET {
-            ResolveGuard::Value(Get)
-        } else {
-            ResolveGuard::None
-        }
-    }
-}
-
-/// Get request guard. A system with this as a parameter requires that the method be POST in order
-/// to run.
-pub struct Post;
-
-impl<'a> Resolve<'a> for Post {
-    type Output = Self;
-
-    fn resolve(ctx: &'a RequestState, _path_iter: &mut PathIter) -> ResolveGuard<Self> {
-        if ctx.request.method() == Method::POST {
-            ResolveGuard::Value(Post)
-        } else {
-            ResolveGuard::None
-        }
-    }
-}
-
 /// "Query" a value from the global_cache of the `RequestState` and clone it.
 pub struct Query<K>(pub K::Value)
 where
@@ -84,35 +53,8 @@ where
 {
     type Output = Self;
 
-    fn resolve(ctx: &'a RequestState, _path_iter: &mut PathIter) -> ResolveGuard<Self> {
+    fn resolve(ctx: &'a RequestState, _captures: &mut Captures) -> ResolveGuard<Self> {
         ctx.global_cache.get::<K>().map(|v| Query(v.clone())).into()
-    }
-}
-
-/// A function with `Endpoint` as a parameter requires that the internal `path_iter` of the
-/// `RequestState` must be empty. This will only run if there are no trailing path parts of the
-/// uri.
-pub struct Endpoint;
-
-impl<'a> Resolve<'a> for Endpoint {
-    type Output = Self;
-
-    fn resolve(_ctx: &RequestState, path_iter: &mut PathIter) -> ResolveGuard<Self> {
-        match path_iter.peek() {
-            Some(v) if !v.is_empty() => ResolveGuard::None,
-            _ => ResolveGuard::Value(Endpoint),
-        }
-    }
-}
-
-/// Collects the entire `Url` without modifying the `path_iter`
-pub struct Url(pub Vec<String>);
-
-impl<'a> Resolve<'a> for Url {
-    type Output = Self;
-
-    fn resolve(_ctx: &'a RequestState, path_iter: &mut PathIter) -> ResolveGuard<Self::Output> {
-        ResolveGuard::Value(Url(path_iter.clone().map(|s| s.to_owned()).collect()))
     }
 }
 
@@ -124,8 +66,12 @@ pub struct UrlPart(pub String);
 impl<'a> Resolve<'a> for UrlPart {
     type Output = Self;
 
-    fn resolve(_ctx: &'a RequestState, path_iter: &mut PathIter) -> ResolveGuard<Self> {
-        path_iter.next().map(|i| UrlPart(i.to_string())).into()
+    fn resolve(_ctx: &'a RequestState, captures: &mut Captures) -> ResolveGuard<Self> {
+        let Some(part) = captures.pop_front() else {
+            return ResolveGuard::None;
+        };
+
+        ResolveGuard::Value(UrlPart(part))
     }
 }
 
@@ -137,21 +83,24 @@ pub struct UrlCollect(pub Vec<String>);
 impl<'a> Resolve<'a> for UrlCollect {
     type Output = Self;
 
-    fn resolve(_ctx: &'a RequestState, path_iter: &mut PathIter) -> ResolveGuard<Self> {
-        let mut collect = Vec::new();
+    fn resolve(_ctx: &'a RequestState, captures: &mut Captures) -> ResolveGuard<Self> {
+        let mut new = Vec::new();
 
-        for part in path_iter.by_ref().map(|i| i.to_string()) {
-            collect.push(part.to_string())
+        while let Some(part) = captures.pop_front() {
+            new.push(part)
         }
 
-        ResolveGuard::Value(UrlCollect(collect))
+        ResolveGuard::Value(UrlCollect(new))
     }
 }
 
 impl<'a, 'b> Resolve<'a> for &'b [u8] {
     type Output = &'a [u8];
 
-    fn resolve(ctx: &'a RequestState, _path_iter: &mut PathIter) -> ResolveGuard<Self::Output> {
+    fn resolve(
+        ctx: &'a RequestState,
+        _captures: &mut Captures,
+    ) -> ResolveGuard<Self::Output> {
         ResolveGuard::Value(ctx.request.body().get_as_slice())
     }
 }
@@ -159,7 +108,10 @@ impl<'a, 'b> Resolve<'a> for &'b [u8] {
 impl<'a, 'b> Resolve<'a> for &'b str {
     type Output = &'a str;
 
-    fn resolve(ctx: &'a RequestState, _path_iter: &mut PathIter) -> ResolveGuard<Self::Output> {
+    fn resolve(
+        ctx: &'a RequestState,
+        _captures: &mut Captures,
+    ) -> ResolveGuard<Self::Output> {
         std::str::from_utf8(ctx.request.body().get_as_slice())
             .ok()
             .into()

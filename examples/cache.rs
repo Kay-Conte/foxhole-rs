@@ -1,9 +1,7 @@
 use std::sync::{Arc, RwLock};
 
 use foxhole::{
-    action::Html,
-    resolve::{Endpoint, Get, Query},
-    sys, App, Http1, Scope, TypeCache, TypeCacheKey,
+    action::Html, resolve::Query, App, Http1, Method::Get, Router, TypeCache, TypeCacheKey
 };
 
 pub struct Counter(u32);
@@ -15,7 +13,7 @@ impl TypeCacheKey for Counter {
 }
 
 // The value stored inside `Query` is `Counter::Value`
-fn get(_get: Get, counter: Query<Counter>, _e: Endpoint) -> Html {
+fn get(counter: Query<Counter>) -> Html {
     counter.0.write().unwrap().0 += 1;
 
     let page = format!(
@@ -27,7 +25,7 @@ fn get(_get: Get, counter: Query<Counter>, _e: Endpoint) -> Html {
 }
 
 fn main() {
-    let scope = Scope::new(sys![get]);
+    let scope = Router::new().add_route("/", Get(get));
 
     let mut cache = TypeCache::new();
 

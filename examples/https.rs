@@ -1,19 +1,20 @@
 use std::io::BufReader;
 
-use foxhole::{action::Html, Http1, resolve::Get, sys, App, Scope};
+use foxhole::{action::Html, App, Http1, Router, Method::Get};
 use rustls::ServerConfig;
 
 // ! These are dummy files. Replace them with real cert and key.
 const CERT_FILE: &[u8] = include_bytes!("./auth/cert.pem");
 const KEY_FILE: &[u8] = include_bytes!("./auth/key.pem");
 
-fn get(_get: Get) -> Html {
+fn get() -> Html {
     Html("<h1> Foxhole! </h1>".to_string())
 }
 
 #[cfg(feature = "tls")]
 fn main() {
-    let scope = Scope::new(sys![get]);
+
+    let router = Router::new().add_route("/", Get(get));
 
     let cert_chain = rustls_pemfile::certs(&mut BufReader::new(CERT_FILE))
         .collect::<Result<Vec<_>, _>>()
@@ -30,7 +31,7 @@ fn main() {
 
     println!("Running on localhost:8080");
 
-    App::builder(scope)
+    App::builder(router)
         .tls_config(config)
         .run::<Http1>("127.0.0.1:8080");
 }

@@ -1,6 +1,5 @@
 use foxhole::{
-    resolve::{Post, Resolve, ResolveGuard},
-    sys, App, Http1, PathIter, RequestState, Scope,
+    resolve::{Resolve, ResolveGuard}, App, Captures, Http1, Method::Post, RequestState, Router
 };
 
 use std::str;
@@ -10,21 +9,21 @@ struct Body<'a>(&'a str);
 impl<'a, 'b> Resolve<'b> for Body<'a> {
     type Output = Body<'b>;
 
-    fn resolve(ctx: &'b RequestState, _path_iter: &mut PathIter) -> ResolveGuard<Self::Output> {
+    fn resolve(ctx: &'b RequestState, _path_iter: &mut Captures) -> ResolveGuard<Self::Output> {
         let body = str::from_utf8(ctx.request.body().get_as_slice()).unwrap();
 
         ResolveGuard::Value(Body(body))
     }
 }
 
-fn post(_post: Post, body: Body) -> u16 {
+fn post(body: Body) -> u16 {
     println!("Body: {}", body.0);
 
     200
 }
 
 fn main() {
-    let scope = Scope::new(sys![post]);
+    let router = Router::new().add_route("/", Post(post));
 
-    App::builder(scope).run::<Http1>("127.0.0.1:8080");
+    App::builder(router).run::<Http1>("127.0.0.1:8080");
 }

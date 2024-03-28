@@ -1,8 +1,9 @@
 #[cfg(feature = "websocket")]
 use foxhole::{
-    sys,
     websocket::{Upgrade, Websocket},
-    App, Http1, Scope,
+    App, Http1,
+    Method::Get,
+    Router,
 };
 
 #[cfg(feature = "websocket")]
@@ -22,11 +23,11 @@ fn upgrade(upgrade: Upgrade) -> Websocket {
 
 #[cfg(feature = "websocket")]
 fn main() {
-    let scope = Scope::new(sys![upgrade]);
+    let router = Router::new().add_route("/", Get(upgrade));
 
     println!("Running on '127.0.0.1:8080'");
 
-    App::builder(scope).run::<Http1>("127.0.0.1:8080");
+    App::builder(router).run::<Http1>("127.0.0.1:8080");
 }
 
 #[cfg(not(feature = "websocket"))]

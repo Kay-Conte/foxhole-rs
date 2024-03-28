@@ -1,9 +1,7 @@
 use std::{
     collections::VecDeque,
-    iter::Peekable,
     marker::PhantomData,
     net::TcpStream,
-    str::Split,
     sync::{
         atomic::{AtomicUsize, Ordering},
         Arc, Condvar, Mutex,
@@ -18,7 +16,7 @@ use crate::{
     get_as_slice::GetAsSlice,
     layers::BoxLayer,
     type_cache::TypeCache,
-    Action, IntoResponse, Response, Scope,
+    Action, Response, Router,
 };
 
 #[cfg(feature = "tls")]
@@ -37,10 +35,6 @@ const TIMEOUT: u64 = 5;
 /// throughout the library
 pub type BoxedBodyRequest = Request<Box<dyn 'static + GetAsSlice + Send>>;
 
-/// The url iterator type used by the library. This can be found in `RequestState` accessed via the
-/// `Resolve` trait
-pub type PathIter<'a> = Peekable<Split<'a, &'static str>>;
-
 pub(crate) trait Task {
     fn run(self: Box<Self>);
 }
@@ -54,7 +48,7 @@ pub(crate) struct ConnectionTask<C> {
     pub stream: TcpStream,
 
     /// A handle to the applications router tree
-    pub router: Arc<Scope>,
+    pub router: Arc<Router>,
 
     pub request_layer: Arc<BoxLayer<crate::Request>>,
     pub response_layer: Arc<BoxLayer<Response>>,
@@ -128,7 +122,7 @@ pub(crate) struct SecuredConnectionTask<C> {
 
     pub stream: TcpStream,
 
-    pub router: Arc<Scope>,
+    pub router: Arc<Router>,
 
     pub tls_config: Arc<ServerConfig>,
 
@@ -218,7 +212,7 @@ pub(crate) struct RequestTask<R, C> {
     pub responder: R,
 
     /// A handle to the applications router tree
-    pub router: Arc<Scope>,
+    pub router: Arc<Router>,
 
     /// This field is only used on `websocket`
     #[allow(dead_code)]
@@ -233,62 +227,52 @@ where
     R: Responder,
     C: Connection,
 {
-    fn run(self: Box<Self>) {
-        let path = self.request.uri().path().to_owned();
+    fn run(mut self: Box<Self>) {
+        self.request_layer.execute(&mut self.request);
 
-        let mut path_iter = path.split("/").peekable();
+        let uri = self.request.uri().to_string();
 
-        path_iter.next();
+        let Some((handler, captures)) = self.router.route(&uri) else {
+            // TODO handle fallback
+            return;
+        };
 
-        let mut ctx = RequestState {
+        let Some(system) = handler.get(self.request.method()) else {
+            // TODO handle fallback
+            return;
+        };
+
+        let ctx = RequestState {
             global_cache: self.cache.clone(),
             request: self.request,
         };
 
-        self.request_layer.execute(&mut ctx.request);
+        let action = system.call(&ctx, captures);
 
-        let mut cursor = self.router.as_ref();
+        match action {
+            Action::Respond(mut r) => {
+                self.response_layer.execute(&mut r);
 
-        loop {
-            for system in cursor.systems() {
-                match system.call(&ctx, &mut path_iter) {
-                    Action::Respond(mut r) => {
-                        self.response_layer.execute(&mut r);
+                let _ = self.responder.respond(r);
 
-                        let _ = self.responder.respond(r);
-
-                        return;
-                    }
-                    #[cfg(feature = "websocket")]
-                    Action::Upgrade(r, f) => {
-                        // Todo move this handling to the constructor of `Action::Upgrade`
-                        let Some(connection) = self.upgrade else {
-                            return;
-                        };
-
-                        let response = r(&ctx.request);
-                        let _ = self.responder.respond(response);
-
-                        f(connection.upgrade());
-
-                        return;
-                    }
-                    Action::None => {}
-                }
+                return;
             }
+            #[cfg(feature = "websocket")]
+            Action::Upgrade(r, f) => {
+                // Todo move this handling to the constructor of `Action::Upgrade`
+                let Some(connection) = self.upgrade else {
+                    return;
+                };
 
-            let Some(next) = path_iter.next() else {
-                break;
-            };
+                let response = r(&ctx.request);
+                let _ = self.responder.respond(response);
 
-            if let Some(child) = cursor.get_child(next) {
-                cursor = child;
-            } else {
-                break;
+                f(connection.upgrade());
+
+                return;
             }
+            Action::None => {}
         }
-
-        let _ = self.responder.respond(404u16.response());
     }
 }
 

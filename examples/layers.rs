@@ -1,6 +1,5 @@
 use foxhole::{
-    action::Html, resolve::Get, sys, App, DefaultResponseGroup, Http1, Layer, Request, Response,
-    Scope,
+    action::Html, App, DefaultResponseGroup, Http1, Layer, Method::Get, Request, Response, Router
 };
 
 pub struct Logger;
@@ -19,16 +18,16 @@ impl Layer<Response> for Logger {
     }
 }
 
-fn get(_get: Get) -> Html {
+fn get() -> Html {
     Html("<h1> Foxhole </h1>".to_string())
 }
 
 fn main() {
-    let scope = Scope::new(sys![get]);
+    let router = Router::new().add_route("/", Get(get));
 
     println!("Running on '127.0.0.1:8080'");
 
-    App::builder(scope)
+    App::builder(router)
         .request_layer(Logger)
         .response_layer(DefaultResponseGroup::new().add_layer(Logger))
         .run::<Http1>("127.0.0.1:8080");
