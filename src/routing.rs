@@ -1,6 +1,10 @@
 use std::{borrow::BorrowMut, collections::VecDeque};
 
-use crate::handler::{Handler, InsertHandler};
+use crate::{
+    fallback::default_fallback,
+    handler::{Handler, InsertHandler},
+    systems::{DynSystem, IntoDynSystem},
+};
 
 pub type Captures = VecDeque<String>;
 
@@ -47,11 +51,15 @@ impl Pattern {
 
 pub struct Router {
     root: Node,
+    fallback: DynSystem,
 }
 
 impl Router {
     pub fn new() -> Self {
-        Self { root: Node::new() }
+        Self {
+            root: Node::new(),
+            fallback: default_fallback.into_dyn_system(),
+        }
     }
 
     pub fn add_route<T>(mut self, path: &str, handler: impl InsertHandler<T>) -> Self {
@@ -79,6 +87,18 @@ impl Router {
         cursor.handler = Some(new);
 
         self
+    }
+
+    pub fn fallback<T, A>(mut self, system: T) -> Self
+    where
+        T: IntoDynSystem<A>,
+    {
+        self.fallback = system.into_dyn_system();
+        self
+    }
+
+    pub(crate) fn get_fallback(&self) -> &DynSystem {
+        &self.fallback
     }
 
     pub(crate) fn route(&self, path: &str) -> Option<(&Handler, Captures)> {
@@ -118,10 +138,8 @@ impl Router {
 
                         break 'outer;
                     }
-                    _ => { },
+                    _ => {}
                 }
-                
-
             }
 
             if !matched {

@@ -16,7 +16,7 @@ use crate::{
     get_as_slice::GetAsSlice,
     layers::BoxLayer,
     type_cache::TypeCache,
-    Action, Response, Router,
+    Action, IntoResponse, Response, Router,
 };
 
 #[cfg(feature = "tls")]
@@ -232,19 +232,27 @@ where
 
         let uri = self.request.uri().to_string();
 
-        let Some((handler, captures)) = self.router.route(&uri) else {
-            // TODO handle fallback
-            return;
-        };
-
-        let Some(system) = handler.get(self.request.method()) else {
-            // TODO handle fallback
-            return;
-        };
-
         let ctx = RequestState {
             global_cache: self.cache.clone(),
             request: self.request,
+        };
+
+        let Some((handler, captures)) = self.router.route(&uri) else {
+            let action = self.router.get_fallback().call(&ctx, VecDeque::new());
+
+            let res = match action {
+                Action::Respond(r) => r,
+                _ => 500u16.response(),
+            };
+
+            let _ = self.responder.respond(res);
+
+            return;
+        };
+
+        let Some(system) = handler.get(ctx.request.method()) else {
+            // TODO handle fallback
+            return;
         };
 
         let action = system.call(&ctx, captures);
