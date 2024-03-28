@@ -5,6 +5,7 @@ use std::{
 
 use crate::get_as_slice::GetAsSlice;
 
+#[doc(hidden)]
 pub struct Lazy<T> {
     receiver: Receiver<T>,
     value: OnceCell<T>,
