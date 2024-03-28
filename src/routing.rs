@@ -1,6 +1,6 @@
 use std::{borrow::BorrowMut, collections::HashMap};
 
-use crate::systems::DynSystem;
+use crate::{handler::{Handler, InsertHandler}, systems::DynSystem};
 
 /// A Node in the Router tree.
 pub struct Scope {
@@ -47,7 +47,7 @@ impl From<Vec<DynSystem>> for Scope {
 }
 
 struct Node {
-    handler: Option<DynSystem>,
+    handler: Option<Handler>,
     children: Vec<(Pattern, Node)>,
 }
 
@@ -96,7 +96,7 @@ impl Router {
         Self { root: Node::new() }
     }
 
-    pub fn add_route(mut self, path: &str, handler: DynSystem) -> Self {
+    pub fn add_route<T>(mut self, path: &str, handler: impl InsertHandler<T>) -> Self {
         let mut cursor = &mut self.root;
         for segment in path.split("/") {
             if segment.is_empty() {
@@ -114,12 +114,16 @@ impl Router {
             }
         }
 
-        cursor.handler = Some(handler);
+        let mut new = Handler::new();
+
+        handler.insert_to_handler(&mut new);
+
+        cursor.handler = Some(new);
 
         self
     }
 
-    pub fn route(&self, path: &str) -> Option<(&DynSystem, Vec<String>)> {
+    pub fn route(&self, path: &str) -> Option<(&Handler, Vec<String>)> {
         let mut captured = vec![];
 
         let mut cursor = &self.root;
@@ -134,7 +138,7 @@ impl Router {
                 match pattern {
                     Pattern::Exact(s) if s == segment => {
                         cursor = &node;
-                        
+
                         break;
                     }
                     Pattern::Capture => {

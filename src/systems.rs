@@ -1,3 +1,7 @@
+use std::collections::HashMap;
+
+use http::Method;
+
 use crate::{
     action::{Action, IntoAction},
     resolve::{Resolve, ResolveGuard},
@@ -26,6 +30,22 @@ impl DynSystem {
     }
 }
 
+#[doc(hidden)]
+pub trait IntoDynSystem<T> {
+    fn into_dyn_system(self) -> DynSystem;
+}
+
+impl<T, A> IntoDynSystem<A> for T
+where
+    T: for<'a> System<'a, A> + 'static + Send + Sync + Copy,
+{
+    fn into_dyn_system(self) -> DynSystem {
+        DynSystem::new(self)
+    }
+}
+
+
+
 macro_rules! system {
     ($($x:ident),* $(,)?) => {
         impl<'a, RESPONSE, $($x,)* BASE> System<'a, (RESPONSE, $($x,)*)> for BASE
@@ -53,7 +73,7 @@ macro_rules! system {
     }
 }
 
-macro_rules! all {
+macro_rules! system_all {
     () => {
         system! { }
     };
@@ -61,8 +81,9 @@ macro_rules! all {
     ($first:ident, $($x:ident),*$(,)?)  => {
         system! { $first, $($x,)* }
 
-        all! { $($x,)*}
+        system_all! { $($x,)*}
     }
 }
 
-all! { A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P, Q, R, S, T, U, V, W, X, Y, Z }
+system_all! { A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P, Q, R, S, T, U, V, W, X, Y, Z }
+

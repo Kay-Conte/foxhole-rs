@@ -5,6 +5,8 @@ mod sequential_writer;
 mod tasks;
 mod tls_connection;
 
+pub mod handler;
+
 pub mod action;
 pub mod connection;
 pub mod framework;
