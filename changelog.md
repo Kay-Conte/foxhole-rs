@@ -1,3 +1,14 @@
+# [unreleased]
+
+### Added
+- New `Router` type and implementation
+- Fallback handler on `Router`
+- Websocket support under feature flag `websocket`
+
+### Removed
+- All method guards, use `foxhole::Method` now in combination with the new `Router
+- `Scope` in favor of `Router`
+
 # [0.4.0]
 
 ### Added
