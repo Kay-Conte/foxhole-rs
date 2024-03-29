@@ -15,7 +15,8 @@ Size](https://img.shields.io/github/languages/code-size/Kay-Conte/foxhole-rs)
   Foxhole is a simple, fast, synchronous framework built for finishing your
   projects. </div>
  
-# Notes Because this framework is purely synchronous and relies on OS threads
+# Notes 
+Because this framework is purely synchronous and relies on OS threads
 for task scheduling, memory can become an issue on much larger scales because
 of the system minimum stack size.
  
@@ -36,7 +37,8 @@ outdated.
 Untested!
 - Http2 support coming.
 
-# Getting Started Foxhole uses a set of magic handler systems and traits to
+# Getting Started 
+Foxhole uses a set of magic handler systems and traits to
 simplify handling requests and responses.   Here's a starting example of a
 Hello World server. ```rust use foxhole::{action::Html, App, Http1,
 Method::Get, Router};
@@ -64,7 +66,8 @@ but few are implemented currently.
 
 The following is basic implementation of `Token` getter.
 
-### Example ```rust use foxhole::{Resolve, ResolveGuard, RequestState,
+### Example 
+```rust use foxhole::{Resolve, ResolveGuard, RequestState,
 Captures};
 
 struct Token(String);
@@ -91,7 +94,9 @@ If a type returns `None` out of `Action` a response will not be sent and
 routing will continue to the fallback. On failure of the fallback, a 500 will
 be sent to the client.
 
-### Example ```rust use foxhole::{IntoResponse, Response};
+### Example 
+```rust 
+use foxhole::{IntoResponse, Response};
 
 // This is a reimplementation of the provided `Html` type. struct Html(String);
 
@@ -102,9 +107,12 @@ http::Response::builder() .status(200) .header("Content-Type", "text/html;
 charset=utf-8") .header("Content-Length", format!("{}", bytes.len()))
 .body(bytes) .unwrap() } }
 
-fn page() -> Html { Html("<h1> Hey Friend </h1>".to_string()) } ```
+fn page() -> Html { Html("<h1> Hey Friend </h1>".to_string()) } 
+```
  
-# Contributing Feel free to open an issue or pull request if you have
+# Contributing 
+Feel free to open an issue or pull request if you have
 suggestions for features or improvements!
  
-# License MIT license (LICENSE or https://opensource.org/licenses/MIT)
+# License 
+MIT license (LICENSE or https://opensource.org/licenses/MIT)
