@@ -1,3 +1,5 @@
+use std::collections::VecDeque;
+
 use crate::{action::RawResponse, routing::Captures, type_cache::TypeCacheKey, RequestState};
 
 /// `Resolve` is a trait used to construct values needed to call a given `System`. All parameters
@@ -22,21 +24,21 @@ pub enum ResolveGuard<T> {
     None,
 }
 
-impl<T> From<Option<T>> for ResolveGuard<T> {
-    fn from(value: Option<T>) -> Self {
-        match value {
-            Some(v) => ResolveGuard::Value(v),
-            None => ResolveGuard::None,
-        }
-    }
-}
-
 impl<T> ResolveGuard<T> {
     pub fn map<N>(self, f: fn(T) -> N) -> ResolveGuard<N> {
         match self {
             ResolveGuard::Value(v) => ResolveGuard::Value(f(v)),
             ResolveGuard::Respond(v) => ResolveGuard::Respond(v),
             ResolveGuard::None => ResolveGuard::None,
+        }
+    }
+}
+
+impl<T> From<Option<T>> for ResolveGuard<T> {
+    fn from(value: Option<T>) -> Self {
+        match value {
+            Some(v) => ResolveGuard::Value(v),
+            None => ResolveGuard::None,
         }
     }
 }
@@ -98,13 +100,11 @@ impl Resolve for UrlCollect {
     type Output<'a> = Self;
 
     fn resolve(_ctx: &RequestState, captures: &mut Captures) -> ResolveGuard<Self> {
-        let mut new = Vec::new();
+        let mut new = VecDeque::new();
 
-        while let Some(part) = captures.pop_front() {
-            new.push(part)
-        }
+        std::mem::swap(&mut new, captures);
 
-        ResolveGuard::Value(UrlCollect(new))
+        ResolveGuard::Value(UrlCollect(Vec::from(new)))
     }
 }
 
