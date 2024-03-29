@@ -122,6 +122,23 @@ impl<'a> Resolve for HeaderMap<'a> {
     }
 }
 
+impl<'a, T> Resolve for Option<T>
+where
+    T: Resolve,
+{
+    type Output<'b> = Option<T::Output<'b>>;
+
+    fn resolve<'c>(
+        ctx: &'c RequestState,
+        captures: &mut Captures,
+    ) -> ResolveGuard<Self::Output<'c>> {
+        match T::resolve(ctx, captures) {
+            ResolveGuard::Value(v) => ResolveGuard::Value(Some(v)),
+            _ => ResolveGuard::Value(None),
+        }
+    }
+}
+
 impl<'a> Resolve for &'a [u8] {
     type Output<'b> = &'b [u8];
 
