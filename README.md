@@ -13,9 +13,10 @@
 [![License](https://img.shields.io/crates/l/foxhole.svg)](https://opensource.org/licenses/MIT)
 
   </p>
+
+  Foxhole is a simple, fast, synchronous framework built for finishing your projects.
 </div>
  
-Foxhole is a simple, fast, synchronous framework built for finishing your projects.
  
 # Opinionated decisions
 - No async. Binary bloat and poor ergonomics
