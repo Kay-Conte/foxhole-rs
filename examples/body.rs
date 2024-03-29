@@ -1,15 +1,21 @@
 use foxhole::{
-    resolve::{Resolve, ResolveGuard}, App, Captures, Http1, Method::Post, RequestState, Router
+    resolve::{Resolve, ResolveGuard},
+    App, Captures, Http1,
+    Method::Post,
+    RequestState, Router,
 };
 
 use std::str;
 
 struct Body<'a>(&'a str);
 
-impl<'a, 'b> Resolve<'b> for Body<'a> {
-    type Output = Body<'b>;
+impl<'a> Resolve for Body<'a> {
+    type Output<'b> = Body<'b>;
 
-    fn resolve(ctx: &'b RequestState, _path_iter: &mut Captures) -> ResolveGuard<Self::Output> {
+    fn resolve<'c>(
+        ctx: &'c RequestState,
+        _path_iter: &mut Captures,
+    ) -> ResolveGuard<Self::Output<'c>> {
         let body = str::from_utf8(ctx.request.body().get_as_slice()).unwrap();
 
         ResolveGuard::Value(Body(body))

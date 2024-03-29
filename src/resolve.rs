@@ -2,10 +2,13 @@ use crate::{action::RawResponse, routing::Captures, type_cache::TypeCacheKey, Re
 
 /// `Resolve` is a trait used to construct values needed to call a given `System`. All parameters
 /// of a `System` must implement `Resolve` to be valid.
-pub trait Resolve<'a>: Sized {
-    type Output: 'a;
+pub trait Resolve: Sized {
+    type Output<'a>;
 
-    fn resolve(ctx: &'a RequestState, captures: &mut Captures) -> ResolveGuard<Self::Output>;
+    fn resolve<'a>(
+        ctx: &'a RequestState,
+        captures: &mut Captures,
+    ) -> ResolveGuard<Self::Output<'a>>;
 }
 
 /// `ResolveGuard` is the expected return type of top level `Resolve`able objects. Only types that
@@ -43,13 +46,16 @@ pub struct Query<'a, K>(pub &'a K::Value)
 where
     K: TypeCacheKey;
 
-impl<'a, 'b, K> Resolve<'b> for Query<'a, K>
+impl<'a, K> Resolve for Query<'a, K>
 where
     K: TypeCacheKey,
 {
-    type Output = Query<'b, K>;
+    type Output<'b> = Query<'b, K>;
 
-    fn resolve(ctx: &'b RequestState, _captures: &mut Captures) -> ResolveGuard<Self::Output> {
+    fn resolve<'c>(
+        ctx: &'c RequestState,
+        _captures: &mut Captures,
+    ) -> ResolveGuard<Self::Output<'c>> {
         ctx.global_cache.get::<K>().map(|v| Query(v)).into()
     }
 }
@@ -57,10 +63,13 @@ where
 /// Returns a reference to the path of the request.
 pub struct Url<'a>(pub &'a str);
 
-impl<'a, 'b> Resolve<'b> for Url<'a> {
-    type Output = Url<'b>;
+impl<'a> Resolve for Url<'a> {
+    type Output<'b> = Url<'b>;
 
-    fn resolve(ctx: &'b RequestState, _captures: &mut Captures) -> ResolveGuard<Self::Output> {
+    fn resolve<'c>(
+        ctx: &'c RequestState,
+        _captures: &mut Captures,
+    ) -> ResolveGuard<Self::Output<'c>> {
         ResolveGuard::Value(Url(ctx.request.uri().path()))
     }
 }
@@ -69,10 +78,10 @@ impl<'a, 'b> Resolve<'b> for Url<'a> {
 /// is defined in the route url.
 pub struct UrlPart(pub String);
 
-impl<'a> Resolve<'a> for UrlPart {
-    type Output = Self;
+impl Resolve for UrlPart {
+    type Output<'a> = Self;
 
-    fn resolve(_ctx: &'a RequestState, captures: &mut Captures) -> ResolveGuard<Self> {
+    fn resolve(_ctx: &RequestState, captures: &mut Captures) -> ResolveGuard<Self> {
         let Some(part) = captures.pop_front() else {
             return ResolveGuard::None;
         };
@@ -85,10 +94,10 @@ impl<'a> Resolve<'a> for UrlPart {
 /// defined in the route url.
 pub struct UrlCollect(pub Vec<String>);
 
-impl<'a> Resolve<'a> for UrlCollect {
-    type Output = Self;
+impl Resolve for UrlCollect {
+    type Output<'a> = Self;
 
-    fn resolve(_ctx: &'a RequestState, captures: &mut Captures) -> ResolveGuard<Self> {
+    fn resolve(_ctx: &RequestState, captures: &mut Captures) -> ResolveGuard<Self> {
         let mut new = Vec::new();
 
         while let Some(part) = captures.pop_front() {
@@ -102,26 +111,35 @@ impl<'a> Resolve<'a> for UrlCollect {
 /// A case insensitive `HashMap` of headers
 pub struct HeaderMap<'a>(pub &'a http::HeaderMap);
 
-impl<'a, 'b> Resolve<'a> for HeaderMap<'b> {
-    type Output = HeaderMap<'a>;
+impl<'a> Resolve for HeaderMap<'a> {
+    type Output<'b> = HeaderMap<'b>;
 
-    fn resolve(ctx: &'a RequestState, _captures: &mut Captures) -> ResolveGuard<Self::Output> {
+    fn resolve<'c>(
+        ctx: &'c RequestState,
+        _captures: &mut Captures,
+    ) -> ResolveGuard<Self::Output<'c>> {
         ResolveGuard::Value(HeaderMap(ctx.request.headers()))
     }
 }
 
-impl<'a, 'b> Resolve<'a> for &'b [u8] {
-    type Output = &'a [u8];
+impl<'a> Resolve for &'a [u8] {
+    type Output<'b> = &'b [u8];
 
-    fn resolve(ctx: &'a RequestState, _captures: &mut Captures) -> ResolveGuard<Self::Output> {
+    fn resolve<'c>(
+        ctx: &'c RequestState,
+        _captures: &mut Captures,
+    ) -> ResolveGuard<Self::Output<'c>> {
         ResolveGuard::Value(ctx.request.body().get_as_slice())
     }
 }
 
-impl<'a, 'b> Resolve<'a> for &'b str {
-    type Output = &'a str;
+impl<'a> Resolve for &'a str {
+    type Output<'b> = &'b str;
 
-    fn resolve(ctx: &'a RequestState, _captures: &mut Captures) -> ResolveGuard<Self::Output> {
+    fn resolve<'c>(
+        ctx: &'c RequestState,
+        _captures: &mut Captures,
+    ) -> ResolveGuard<Self::Output<'c>> {
         std::str::from_utf8(ctx.request.body().get_as_slice())
             .ok()
             .into()

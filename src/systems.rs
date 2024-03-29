@@ -46,8 +46,8 @@ macro_rules! system {
     ($($x:ident),* $(,)?) => {
         impl<'a, RESPONSE, $($x,)* BASE> System<'a, (RESPONSE, $($x,)*)> for BASE
         where
-            BASE: Fn($($x,)*) -> RESPONSE + Fn($($x::Output,)*) -> RESPONSE,
-            $($x: Resolve<'a>,)*
+            BASE: Fn($($x,)*) -> RESPONSE + Fn($($x::Output<'a>,)*) -> RESPONSE,
+            $($x: Resolve,)*
             RESPONSE: IntoAction,
         {
             #[allow(unused)]

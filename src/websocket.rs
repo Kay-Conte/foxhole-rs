@@ -66,13 +66,13 @@ impl Upgrade {
     }
 }
 
-impl<'a> Resolve<'a> for Upgrade {
-    type Output = Upgrade;
+impl Resolve for Upgrade {
+    type Output<'a> = Upgrade;
 
     fn resolve(
-        ctx: &'a crate::RequestState,
+        ctx: &crate::RequestState,
         _captures: &mut VecDeque<String>,
-    ) -> crate::ResolveGuard<Self::Output> {
+    ) -> crate::ResolveGuard<Self> {
         let Some(header) = ctx
             .request
             .headers()
