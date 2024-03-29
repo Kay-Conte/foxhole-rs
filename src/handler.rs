@@ -4,14 +4,30 @@ use crate::systems::{DynSystem, IntoDynSystem};
 
 pub enum Method<T> {
     Get(T),
+    Head(T),
     Post(T),
+    Put(T),
+    Delete(T),
+    Connect(T),
+    Options(T),
+    Patch(T),
+    Trace(T),
 }
 
 impl<T> Method<T> {
     pub(crate) fn inner(self) -> (http::Method, T) {
+        use Method::*;
+
         match self {
-            Method::Get(v) => (http::Method::GET, v),
-            Method::Post(v) => (http::Method::POST, v),
+            Get(v) => (http::Method::GET, v),
+            Head(v) => (http::Method::HEAD, v),
+            Post(v) => (http::Method::POST, v),
+            Put(v) => (http::Method::PUT, v),
+            Delete(v) => (http::Method::DELETE, v),
+            Connect(v) => (http::Method::CONNECT, v),
+            Options(v) => (http::Method::OPTIONS, v),
+            Patch(v) => (http::Method::PATCH, v),
+            Trace(v) => (http::Method::TRACE, v),
         }
     }
 }
