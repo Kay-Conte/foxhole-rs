@@ -10,7 +10,6 @@
 [![Crates.io](https://img.shields.io/crates/v/foxhole.svg)](https://crates.io/crates/foxhole)
 [![Docs.rs](https://docs.rs/foxhole/badge.svg)](https://docs.rs/foxhole)
 ![Code Size](https://img.shields.io/github/languages/code-size/Kay-Conte/foxhole-rs)
-![Maintained](https://img.shields.io/maintenance/yes/2023?style=flat-square)
 [![License](https://img.shields.io/crates/l/foxhole.svg)](https://opensource.org/licenses/MIT)
 
   </p>
