@@ -13,8 +13,10 @@ use crate::{
     http_utils::{take_request, IntoRawBytes},
     lazy::Lazy,
     sequential_writer::{self, SequentialWriter},
-    tls_connection::TlsConnection,
 };
+
+#[cfg(feature = "tls")]
+use crate::tls_connection::TlsConnection;
 
 /// A marker used to encapsulate the required traits for a stream used by `Http1`
 pub trait BoxedStreamMarker: Read + Write + BoxedTryClone + SetTimeout + Send + Sync {}
@@ -36,6 +38,7 @@ impl SetTimeout for TcpStream {
     }
 }
 
+#[cfg(feature = "tls")]
 impl SetTimeout for TlsConnection {
     fn set_timeout(&mut self, timeout: Option<Duration>) -> std::io::Result<()> {
         self.stream.set_read_timeout(timeout)?;
@@ -54,6 +57,7 @@ impl BoxedTryClone for TcpStream {
     }
 }
 
+#[cfg(feature = "tls")]
 impl BoxedTryClone for TlsConnection {
     fn try_clone(&self) -> std::io::Result<BoxedStream> {
         self.stream

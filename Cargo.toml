@@ -11,13 +11,13 @@ rust-version = "1.65.0"
 [features]
 default = ["date"]
 
-tls = []
+tls = ["rustls"]
 date = ["chrono"]
 websocket = ["sha1", "base64"]
 
 [dependencies]
 http = "0.2.9"
-rustls = "0.23.2"
+rustls = { version = "0.23.2", optional = true }
 
 chrono = { version = "0.4.35", optional = true }
 

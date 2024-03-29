@@ -4,6 +4,8 @@ mod handler;
 mod lazy;
 mod sequential_writer;
 mod tasks;
+
+#[cfg(feature = "tls")]
 mod tls_connection;
 
 pub mod action;

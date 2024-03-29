@@ -1,6 +1,8 @@
 use std::io::BufReader;
 
 use foxhole::{action::Html, App, Http1, Method::Get, Router};
+
+#[cfg(feature = "tls")]
 use rustls::ServerConfig;
 
 // ! These are dummy files. Replace them with real cert and key.
