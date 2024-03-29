@@ -100,7 +100,7 @@ impl<'a> Resolve<'a> for UrlCollect {
 }
 
 /// A case insensitive `HashMap` of headers
-pub struct HeaderMap<'a>(&'a http::HeaderMap);
+pub struct HeaderMap<'a>(pub &'a http::HeaderMap);
 
 impl<'a, 'b> Resolve<'a> for HeaderMap<'b> {
     type Output = HeaderMap<'a>;
