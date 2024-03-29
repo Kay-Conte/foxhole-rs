@@ -7,25 +7,30 @@ use crate::{connection::BoxedStream, Request};
 
 pub type RawResponse = Response<Vec<u8>>;
 
-/// This is a helper trait to remove the unnecessary `Option` many response types don't need as
-/// they do not affect control flow.
+/// This is a helper trait to remove the unnecessary `Action` many response types don't need as
+/// they are infallible
 pub trait IntoResponse {
     fn response(self) -> RawResponse;
 }
 
+/// An action to execute on the current request.
 pub enum Action {
+    /// Respond to the request.
     Respond(RawResponse),
     #[cfg(feature = "websocket")]
+    /// Upgrade the connection to a websocket with a custom handler. Unless implementing a specific
+    /// websocket version or protocol negotiation, you probably want to use `foxhole::websocket::Upgrade` instead.
     Upgrade(fn(&Request) -> crate::Response, Box<dyn Fn(BoxedStream)>),
+
+    /// Do nothing and procede to fallback.
     None,
 }
 
 /// All `System`s must return a type implementing `Action`. This trait decides the
 /// behaviour of the underlying router.
-/// - `Action::None` The router will continue to the next system
-/// - `Action::Respond` The router will respond immediately. No subsequent systems will be run
-/// - `Action::Handle` The task will transfer ownership of the stream to the fn. No subsequent
-/// systems will be run
+/// - `Action::None` The router will continue to the fallback.
+/// - `Action::Respond` The router will respond.
+/// - `Action::Handle` The task will transfer ownership of the stream to the fn. 
 pub trait IntoAction {
     fn action(self) -> Action;
 }
