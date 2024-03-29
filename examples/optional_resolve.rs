@@ -8,7 +8,7 @@ impl Resolve for Fallible {
     fn resolve(
         _ctx: &foxhole::RequestState,
         _captures: &mut foxhole::Captures,
-    ) -> foxhole::ResolveGuard<Self> {
+    ) -> ResolveGuard<Self> {
         ResolveGuard::None
     }
 }

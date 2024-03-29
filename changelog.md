@@ -7,6 +7,7 @@
 - Resolvable types:
     - `Url`
     - `HeaderMap`
+    - `Option<T>`
 
 ### Changed
 - `Resolve` no longer takes a lifetime in favor of generic associated lifetime
