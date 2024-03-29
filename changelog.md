@@ -5,7 +5,11 @@
 - Fallback handler on `Router`
 - Websocket support under feature flag `websocket`
 - Resolvable types:
-  - `Url`
+    - `Url`
+    - `HeaderMap`
+
+### Changed
+- `Resolve` no longer takes a lifetime in favor of generic associated lifetime
 
 ### Removed
 - All method guards, use `foxhole::Method` now in combination with the new `Router
