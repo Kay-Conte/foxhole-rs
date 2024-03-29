@@ -71,13 +71,13 @@ use foxhole::{Resolve, ResolveGuard};
 
 struct Token(String);
 
-impl<'a> Resolve<'a> for Token {
-    type Output = Self;
+impl Resolve for Token {
+    type Output<'a> = Self;
 
     fn resolve(
-        ctx: &'a foxhole::RequestState,
+        ctx: &foxhole::RequestState,
         _captures: &mut foxhole::Captures,
-    ) -> ResolveGuard<Self::Output> {
+    ) -> ResolveGuard<Self> {
         let Some(v) = ctx.request.headers().get("authorization") else {
             return ResolveGuard::None;
         };
