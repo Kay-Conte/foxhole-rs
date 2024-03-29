@@ -34,7 +34,7 @@
 - Http2 support coming.
 
 # Getting Started
-Foxhole uses a set of magic handler systems and traits to simplify handle requests and responses.   
+Foxhole uses a set of magic handler systems and traits to simplify handling requests and responses.   
 Here's a starting example of a Hello World server.
 ```rust
  use foxhole::{action::Html, App, Http1, Method::Get, Router};
