@@ -25,7 +25,7 @@ fn get(Query(counter): Query<Counter>) -> Html {
 }
 
 fn main() {
-    let scope = Router::new().add_route("/", Get(get));
+    let router = Router::new().add_route("/", Get(get));
 
     let mut cache = TypeCache::new();
 
@@ -33,7 +33,7 @@ fn main() {
 
     println!("Try connecting with a browser at 'http://localhost:8080'");
 
-    App::builder(scope)
+    App::builder(router)
         .cache(cache)
         .run::<Http1>("0.0.0.0:8080");
 }

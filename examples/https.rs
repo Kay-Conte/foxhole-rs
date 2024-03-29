@@ -13,7 +13,6 @@ fn get() -> Html {
 
 #[cfg(feature = "tls")]
 fn main() {
-
     let router = Router::new().add_route("/", Get(get));
 
     let cert_chain = rustls_pemfile::certs(&mut BufReader::new(CERT_FILE))

@@ -9,9 +9,9 @@ fn fallback() -> u16 {
 }
 
 fn main() {
-    let scope = Router::new().add_route("/", Get(get)).fallback(fallback);
+    let router = Router::new().add_route("/", Get(get)).fallback(fallback);
 
     println!("Running on '127.0.0.1:8080'");
 
-    App::builder(scope).run::<Http1>("127.0.0.1:8080");
+    App::builder(router).run::<Http1>("127.0.0.1:8080");
 }
