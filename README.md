@@ -67,7 +67,7 @@ The following is basic implementation of `Token` getter.
 
 ### Example
 ```rust
-use foxhole::{Resolve, ResolveGuard};
+use foxhole::{Resolve, ResolveGuard, RequestState, Captures};
 
 struct Token(String);
 
@@ -75,8 +75,8 @@ impl Resolve for Token {
     type Output<'a> = Self;
 
     fn resolve(
-        ctx: &foxhole::RequestState,
-        _captures: &mut foxhole::Captures,
+        ctx: &RequestState,
+        _captures: &mut Captures,
     ) -> ResolveGuard<Self> {
         let Some(v) = ctx.request.headers().get("authorization") else {
             return ResolveGuard::None;
@@ -100,13 +100,13 @@ If a type returns `None` out of `Action` a response will not be sent and routing
 
 ### Example
 ```rust
-use foxhole::IntoResponse;
+use foxhole::{IntoResponse, Response};
 
 // This is a reimplementation of the provided `Html` type.
 struct Html(String);
 
 impl IntoResponse for Html {
-    fn response(self) -> http::Response<Vec<u8>> {
+    fn response(self) -> Response {
         let bytes = self.0.into_bytes();
 
         http::Response::builder()
