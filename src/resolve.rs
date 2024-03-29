@@ -1,4 +1,4 @@
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
 
 use crate::{action::RawResponse, routing::Captures, type_cache::TypeCacheKey, RequestState};
 
@@ -119,6 +119,20 @@ impl<'a> Resolve for HeaderMap<'a> {
         _captures: &mut Captures,
     ) -> ResolveGuard<Self::Output<'c>> {
         ResolveGuard::Value(HeaderMap(ctx.request.headers()))
+    }
+}
+
+/// A map of all url query parameters. Ex: "?foo=bar"
+pub struct ArgMap<'a>(pub &'a HashMap<String, String>);
+
+impl<'a> Resolve for ArgMap<'a> {
+    type Output<'b> = ArgMap<'b>;
+
+    fn resolve<'c>(
+        ctx: &'c RequestState,
+        _captures: &mut Captures,
+    ) -> ResolveGuard<Self::Output<'c>> {
+        ResolveGuard::Value(ArgMap(&ctx.query))
     }
 }
 

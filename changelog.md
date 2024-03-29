@@ -6,9 +6,10 @@
 - Fallback handler on `Router`
 - Websocket support under feature flag `websocket`
 - Resolvable types:
+    - `Option<T>`
     - `Url`
     - `HeaderMap`
-    - `Option<T>`
+    - `ArgMap`
 
 ### Changed
 - `Resolve` no longer takes a lifetime in favor of generic associated lifetime
