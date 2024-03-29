@@ -55,7 +55,7 @@ where
 }
 
 /// Returns a reference to the path of the request.
-pub struct Url<'a>(&'a str);
+pub struct Url<'a>(pub &'a str);
 
 impl<'a, 'b> Resolve<'b> for Url<'a> {
     type Output = Url<'b>;
