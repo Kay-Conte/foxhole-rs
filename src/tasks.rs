@@ -1,5 +1,5 @@
 use std::{
-    collections::VecDeque,
+    collections::{HashMap, VecDeque},
     marker::PhantomData,
     net::TcpStream,
     sync::{
@@ -16,7 +16,7 @@ use crate::{
     get_as_slice::GetAsSlice,
     layers::BoxLayer,
     type_cache::TypeCache,
-    Action, IntoResponse, Response, Router,
+    url_decoding, Action, IntoResponse, Response, Router,
 };
 
 #[cfg(feature = "tls")]
@@ -230,14 +230,23 @@ where
     fn run(mut self: Box<Self>) {
         self.request_layer.execute(&mut self.request);
 
-        let uri = self.request.uri().to_string();
+        let path = self.request.uri().to_string();
+
+        let (path, query) = path.split_once("?").unwrap_or((&path, ""));
+
+        let Some(query) = url_decoding::map(query) else {
+            let _ = self.responder.respond(400u16.response());
+
+            return;
+        };
 
         let ctx = RequestState {
             global_cache: self.cache.clone(),
             request: self.request,
+            query,
         };
 
-        let Some((handler, captures)) = self.router.route(&uri) else {
+        let Some((handler, captures)) = self.router.route(&path) else {
             let action = self.router.get_fallback().call(&ctx, VecDeque::new());
 
             let res = match action {
@@ -288,7 +297,9 @@ where
 pub struct RequestState {
     pub global_cache: Arc<TypeCache>,
     pub request: BoxedBodyRequest,
+    pub query: HashMap<String, String>,
 }
+
 
 struct Shared {
     /// Pool of tasks that need to be run

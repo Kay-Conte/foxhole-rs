@@ -1,6 +1,7 @@
 # [unreleased]
 
 ### Added
+- Url query parameter support
 - New `Router` type and implementation
 - Fallback handler on `Router`
 - Websocket support under feature flag `websocket`
