@@ -26,7 +26,9 @@ fn favicon() -> u16 {
 }
 
 fn main() {
-    let router = Router::new().add_route("/page", Get(page)).add_route("/favicon", Get(favicon));
+    let router = Router::new()
+        .add_route("/page", Get(page))
+        .add_route("/favicon", Get(favicon));
 
     println!("Try connecting from a browser at 'http://localhost:8080/page'");
 

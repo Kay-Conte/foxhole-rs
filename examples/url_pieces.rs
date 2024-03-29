@@ -1,5 +1,8 @@
 use foxhole::{
-    resolve::{UrlCollect, UrlPart}, App, Http1, IntoRawBytes, IntoResponse, Method::Get, Router
+    resolve::{UrlCollect, UrlPart},
+    App, Http1, IntoRawBytes, IntoResponse,
+    Method::Get,
+    Router,
 };
 
 pub struct User(String);

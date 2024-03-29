@@ -1,5 +1,5 @@
 use foxhole::{
-    action::Html, App, DefaultResponseGroup, Http1, Layer, Method::Get, Request, Response, Router
+    action::Html, App, DefaultResponseGroup, Http1, Layer, Method::Get, Request, Response, Router,
 };
 
 pub struct Logger;

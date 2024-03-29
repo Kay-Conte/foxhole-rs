@@ -31,7 +31,7 @@ impl std::fmt::Display for ParseError {
 
 impl std::error::Error for ParseError {}
 
-/// `Version` Extension trait 
+/// `Version` Extension trait
 pub trait VersionExt: Sized {
     /// Parse `Version` from a `&str`. Returns `Err` if the `&str` isn't a valid version of the HTTP protocol
     fn parse_version(s: &str) -> Result<Self, ParseError>;

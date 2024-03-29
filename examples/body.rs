@@ -1,8 +1,4 @@
-use foxhole::{
-    App, Http1,
-    Method::Post,
-    Router,
-};
+use foxhole::{App, Http1, Method::Post, Router};
 
 fn post(_body: &[u8], body_str: &str) -> u16 {
     println!("Body: {}", body_str);

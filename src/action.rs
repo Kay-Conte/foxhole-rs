@@ -30,7 +30,7 @@ pub enum Action {
 /// behaviour of the underlying router.
 /// - `Action::None` The router will continue to the fallback.
 /// - `Action::Respond` The router will respond.
-/// - `Action::Handle` The task will transfer ownership of the stream to the fn. 
+/// - `Action::Handle` The task will transfer ownership of the stream to the fn.
 pub trait IntoAction {
     fn action(self) -> Action;
 }

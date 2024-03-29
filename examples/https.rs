@@ -1,6 +1,6 @@
 use std::io::BufReader;
 
-use foxhole::{action::Html, App, Http1, Router, Method::Get};
+use foxhole::{action::Html, App, Http1, Method::Get, Router};
 use rustls::ServerConfig;
 
 // ! These are dummy files. Replace them with real cert and key.

@@ -7,7 +7,12 @@ use std::{
 };
 
 use crate::{
-    connection::Connection, layers::{BoxLayer, DefaultResponseGroup, Layer}, routing::Router, tasks::TaskPool, type_cache::TypeCache, Request, Response
+    connection::Connection,
+    layers::{BoxLayer, DefaultResponseGroup, Layer},
+    routing::Router,
+    tasks::TaskPool,
+    type_cache::TypeCache,
+    Request, Response,
 };
 
 #[cfg(not(feature = "tls"))]

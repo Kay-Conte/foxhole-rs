@@ -24,7 +24,7 @@ pub mod websocket;
 pub use action::{Action, IntoResponse};
 pub use connection::Http1;
 pub use framework::App;
-pub use handler::Method::{self, *};
+pub use handler::Method;
 pub use http_utils::IntoRawBytes;
 pub use layers::{DefaultResponseGroup, Layer};
 pub use resolve::{Resolve, ResolveGuard};
