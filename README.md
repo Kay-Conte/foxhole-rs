@@ -18,7 +18,7 @@
 </div>
  
  
-# Opinionated decisions
+# Opinionated Decisions
 - No async. Binary bloat and poor ergonomics
 - Minimal dependencies
 
