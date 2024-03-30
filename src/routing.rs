@@ -1,7 +1,7 @@
 use std::{borrow::BorrowMut, collections::VecDeque};
 
 use crate::{
-    fallback::default_fallback,
+    builtin::default_fallback,
     handler::{Handler, InsertHandler},
     systems::{DynSystem, IntoDynSystem},
 };
