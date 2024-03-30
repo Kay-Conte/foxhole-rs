@@ -264,6 +264,29 @@ pub(crate) struct RequestTask<R, C> {
     pub response_layer: Arc<BoxLayer<Response>>,
 }
 
+fn respond_fallback<R>(
+    ctx: RequestState,
+    router: Arc<Router>,
+    response_layer: Arc<BoxLayer<Response>>,
+    responder: R,
+) -> std::io::Result<()>
+where
+    R: Responder,
+{
+    let action = router.get_fallback().call(&ctx, VecDeque::new());
+
+    let mut res = match action {
+        Action::Respond(r) => r,
+        _ => 500u16.response(),
+    };
+
+    response_layer.execute(&mut res);
+
+    let _ = responder.respond(res);
+
+    Ok(())
+}
+
 impl<R, C> Task for RequestTask<R, C>
 where
     R: Responder,
@@ -283,35 +306,20 @@ where
         };
 
         let ctx = RequestState {
-            global_cache: self.cache.clone(),
+            global_cache: self.cache,
             request: self.request,
             query,
         };
 
         let Some((handler, captures)) = self.router.route(&path) else {
-            let action = self.router.get_fallback().call(&ctx, VecDeque::new());
-
-            let res = match action {
-                Action::Respond(r) => r,
-                _ => 500u16.response(),
-            };
-
-            let _ = self.responder.respond(res);
+            let _ = respond_fallback(ctx, self.router, self.response_layer, self.responder);
 
             return;
         };
 
         let Some(system) = handler.get(ctx.request.method()) else {
-            // TODO handle fallback
-            let action = self.router.get_fallback().call(&ctx, VecDeque::new());
-
-            let res = match action {
-                Action::Respond(r) => r,
-                _ => 500u16.response(),
-            };
-
-            let _ = self.responder.respond(res);
-
+            let _ = respond_fallback(ctx, self.router, self.response_layer, self.responder);
+            
             return;
         };
 
@@ -339,7 +347,11 @@ where
 
                 return;
             }
-            Action::None => {}
+            Action::None => {
+                let _ = respond_fallback(ctx, self.router, self.response_layer, self.responder);
+
+                return;
+            }
         }
     }
 }
