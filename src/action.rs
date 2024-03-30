@@ -96,7 +96,7 @@ impl IntoResponse for u16 {
     }
 }
 
-/// Creates a response with the content-type `application/x-binary` there may be a better MIME type
+/// Creates a response with the content-type `application/octet-stream`
 /// to use for this.
 pub struct Raw(pub Vec<u8>);
 
@@ -105,7 +105,7 @@ impl IntoResponse for Raw {
         Response::builder()
             .version(Version::HTTP_11)
             .status(200)
-            .header("Content-Type", "application/x-binary")
+            .header("Content-Type", "application/octet-stream")
             .header("Content-Length", format!("{}", self.0.len()))
             .body(self.0)
             .unwrap()
