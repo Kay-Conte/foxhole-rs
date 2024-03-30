@@ -1,12 +1,13 @@
 use std::{
     collections::{HashMap, VecDeque},
+    io::ErrorKind,
     marker::PhantomData,
     net::TcpStream,
     sync::{
         atomic::{AtomicUsize, Ordering},
         Arc, Condvar, Mutex,
     },
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 use http::Request;
@@ -19,6 +20,8 @@ use crate::{
     url_decoding, Action, IntoResponse, Response, Router,
 };
 
+const MIN_THREADS: usize = 20;
+
 #[cfg(feature = "tls")]
 use std::sync::RwLock;
 
@@ -27,9 +30,6 @@ use rustls::{ServerConfig, ServerConnection};
 
 #[cfg(feature = "tls")]
 use crate::tls_connection::TlsConnection;
-
-const MIN_THREADS: usize = 4;
-const TIMEOUT: u64 = 5;
 
 /// Request with a boxed body implementing `GetAsSlice` This is the standard request type
 /// throughout the library
@@ -66,10 +66,32 @@ where
         };
 
         connection
-            .set_timeout(Some(Duration::from_secs(TIMEOUT)))
+            .set_nonblocking(true)
             .expect("Shouldn't fail unless duration is 0");
 
-        while let Ok((request, responder)) = connection.next_frame() {
+        let mut timeout = Duration::from_secs(5);
+        let mut last = Instant::now();
+
+        loop {
+            if timeout.is_zero() {
+                break;
+            }
+
+            let (request, responder) = match connection.next_frame() {
+                Ok((request, responder)) => (request, responder),
+                Err(e) if e.kind() == ErrorKind::WouldBlock => {
+                    let now = Instant::now();
+                    let elapsed = now - last;
+
+                    timeout = timeout.saturating_sub(elapsed);
+
+                    last = now;
+
+                    continue;
+                }
+                Err(_) => break,
+            };
+
             let r = request.map(|i| {
                 let b: Box<dyn 'static + GetAsSlice + Send> = Box::new(i);
 
@@ -156,11 +178,31 @@ where
             return;
         };
 
-        connection
-            .set_timeout(Some(Duration::from_secs(TIMEOUT)))
-            .expect("Shouldn't fail unless duration is 0");
+        connection.set_nonblocking(true).expect("Shouldn't fail");
 
-        while let Ok((request, responder)) = connection.next_frame() {
+        let mut timeout = Duration::from_secs(5);
+        let mut last = Instant::now();
+
+        loop {
+            let (request, responder) = match connection.next_frame() {
+                Ok((request, responder)) => (request, responder),
+                Err(e) if e.kind() == ErrorKind::WouldBlock => {
+                    let now = Instant::now();
+                    let elapsed = now - last;
+
+                    timeout = timeout.saturating_sub(elapsed);
+
+                    if timeout == Duration::from_secs(0) {
+                        break;
+                    }
+
+                    last = now;
+
+                    continue;
+                }
+                _ => break,
+            };
+
             let r = request.map(|i| {
                 let b: Box<dyn 'static + GetAsSlice + Send> = Box::new(i);
 
@@ -261,6 +303,15 @@ where
 
         let Some(system) = handler.get(ctx.request.method()) else {
             // TODO handle fallback
+            let action = self.router.get_fallback().call(&ctx, VecDeque::new());
+
+            let res = match action {
+                Action::Respond(r) => r,
+                _ => 500u16.response(),
+            };
+
+            let _ = self.responder.respond(res);
+
             return;
         };
 
@@ -293,6 +344,22 @@ where
     }
 }
 
+struct Registration<'a> {
+    nb: &'a AtomicUsize,
+}
+
+impl<'a> Registration<'a> {
+    fn new(nb: &'a AtomicUsize) -> Registration<'a> {
+        nb.fetch_add(1, Ordering::Release);
+        Registration { nb }
+    }
+}
+
+impl<'a> Drop for Registration<'a> {
+    fn drop(&mut self) {
+        self.nb.fetch_sub(1, Ordering::Release);
+    }
+}
 /// Holds the state of the request handling. This can be accessed via the `Resolve` trait.
 pub struct RequestState {
     pub global_cache: Arc<TypeCache>,
@@ -300,31 +367,22 @@ pub struct RequestState {
     pub query: HashMap<String, String>,
 }
 
-
-struct Shared {
+pub struct Shared {
     /// Pool of tasks that need to be run
     pool: Mutex<VecDeque<Box<dyn Task + Send + 'static>>>,
 
     /// Conditional var used to sleep and wake threads
-    condvar: Condvar,
+    pub condvar: Condvar,
 
     /// Total number of threads currently waiting for a task
     waiting_tasks: AtomicUsize,
-}
 
-impl Shared {
-    fn waiting(&self) {
-        self.waiting_tasks.fetch_add(1, Ordering::Release);
-    }
-
-    fn release(&self) {
-        self.waiting_tasks.fetch_sub(1, Ordering::Release);
-    }
+    active_tasks: AtomicUsize,
 }
 
 #[derive(Clone)]
 pub(crate) struct TaskPool {
-    shared: Arc<Shared>,
+    pub shared: Arc<Shared>,
 }
 
 impl TaskPool {
@@ -334,11 +392,12 @@ impl TaskPool {
                 pool: Mutex::new(VecDeque::new()),
                 condvar: Condvar::new(),
                 waiting_tasks: AtomicUsize::new(0),
+                active_tasks: AtomicUsize::new(0),
             }),
         };
 
         for _ in 0..MIN_THREADS {
-            pool.spawn_thread(false, None);
+            pool.spawn_thread(None);
         }
 
         pool
@@ -352,47 +411,47 @@ impl TaskPool {
     /// likely remain until there is a graceful shutdown mechanism
     ///
     /// This function can also panic on 0 duration.
-    fn spawn_thread(&self, should_cull: bool, initial_task: Option<Box<dyn Task + Send>>) {
+    fn spawn_thread(&self, initial_task: Option<Box<dyn Task + Send>>) {
         let shared = self.shared.clone();
 
         std::thread::spawn(move || {
-            match initial_task {
-                Some(task) => task.run(),
-                None => {}
+            let shared = shared;
+            let _active = Registration::new(&shared.active_tasks);
+
+            if let Some(t) = initial_task {
+                t.run();
             }
 
             loop {
                 let mut pool = shared.pool.lock().unwrap();
 
-                shared.waiting();
-
-                if should_cull {
-                    let (new, timeout) = shared
-                        .condvar
-                        .wait_timeout(pool, Duration::from_secs(5))
-                        .unwrap();
-
-                    if timeout.timed_out() {
-                        // Make sure not to bloat waiting count
-                        break;
+                let task = loop {
+                    if let Some(task) = pool.pop_front() {
+                        break task;
                     }
 
-                    pool = new;
-                } else {
-                    pool = shared.condvar.wait(pool).unwrap();
-                }
+                    let _waiting = Registration::new(&shared.waiting_tasks);
 
-                shared.release();
+                    if shared.active_tasks.load(Ordering::Acquire) <= MIN_THREADS {
+                        pool = shared.condvar.wait(pool).unwrap();
+                    } else {
+                        let (new_lock, waitres) = shared
+                            .condvar
+                            .wait_timeout(pool, Duration::from_secs(5))
+                            .unwrap();
 
-                let Some(task) = pool.pop_front() else {
-                    continue;
+                        pool = new_lock;
+
+                        if waitres.timed_out() && pool.is_empty() {
+                            return;
+                        }
+                    }
                 };
 
                 drop(pool);
 
                 task.run();
             }
-            shared.release()
         });
     }
 
@@ -405,10 +464,12 @@ impl TaskPool {
     where
         T: Task + Send + 'static,
     {
-        if self.shared.waiting_tasks.load(Ordering::Acquire) < MIN_THREADS {
-            self.spawn_thread(true, Some(Box::new(task)));
+        let mut queue = self.shared.pool.lock().unwrap();
+
+        if self.shared.waiting_tasks.load(Ordering::Acquire) == 0 {
+            self.spawn_thread(Some(Box::new(task)));
         } else {
-            self.shared.pool.lock().unwrap().push_back(Box::new(task));
+            queue.push_back(Box::new(task));
             self.shared.condvar.notify_one();
         }
     }

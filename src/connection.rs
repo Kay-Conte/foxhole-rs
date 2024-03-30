@@ -1,5 +1,5 @@
 use std::{
-    io::{BufReader, ErrorKind, Read, Write},
+    io::{ErrorKind, Read, Write},
     net::TcpStream,
     sync::mpsc::{Receiver, Sender},
     time::Duration,
@@ -10,7 +10,7 @@ use http::Request;
 use crate::{
     action::RawResponse,
     get_as_slice::GetAsSlice,
-    http_utils::{take_request, IntoRawBytes},
+    http_utils::{take_request, IntoRawBytes, ParseError},
     lazy::Lazy,
     sequential_writer::{self, SequentialWriter},
 };
@@ -19,11 +19,34 @@ use crate::{
 use crate::tls_connection::TlsConnection;
 
 /// A marker used to encapsulate the required traits for a stream used by `Http1`
-pub trait BoxedStreamMarker: Read + Write + BoxedTryClone + SetTimeout + Send + Sync {}
+pub trait BoxedStreamMarker:
+    Read + Write + BoxedTryClone + SetTimeout + SetNonBlocking + Send + Sync
+{
+}
 
-impl<T> BoxedStreamMarker for T where T: Read + Write + BoxedTryClone + SetTimeout + Send + Sync {}
+impl<T> BoxedStreamMarker for T where
+    T: Read + Write + BoxedTryClone + SetTimeout + SetNonBlocking + Send + Sync
+{
+}
 
 pub type BoxedStream = Box<dyn BoxedStreamMarker>;
+
+pub trait SetNonBlocking {
+    fn set_nonblocking(&mut self, value: bool) -> std::io::Result<()>;
+}
+
+impl SetNonBlocking for TcpStream {
+    fn set_nonblocking(&mut self, value: bool) -> std::io::Result<()> {
+        TcpStream::set_nonblocking(self, value)
+    }
+}
+
+#[cfg(feature = "tls")]
+impl SetNonBlocking for TlsConnection {
+    fn set_nonblocking(&mut self, value: bool) -> std::io::Result<()> {
+        self.stream.set_nonblocking(value)
+    }
+}
 
 /// A trait providing a `set_timeout` function for streams
 pub trait SetTimeout {
@@ -75,6 +98,8 @@ pub trait Connection: Sized + Send {
 
     fn set_timeout(&mut self, timeout: Option<Duration>) -> Result<(), std::io::Error>;
 
+    fn set_nonblocking(&mut self, value: bool) -> std::io::Result<()>;
+
     /// Reading of the body of the previous frame may occur on subsequent calls depending on
     /// implementation
     fn next_frame(&mut self) -> Result<(Request<Self::Body>, Self::Responder), std::io::Error>;
@@ -100,6 +125,8 @@ pub trait Responder: Sized + Send {
 /// HTTP 1.1
 pub struct Http1 {
     conn: BoxedStream,
+    buf: Vec<u8>,
+    read: usize,
     next_writer: Option<Receiver<BoxedStream>>,
     unfinished: Option<(usize, Sender<Vec<u8>>)>,
 }
@@ -135,6 +162,8 @@ impl Connection for Http1 {
     fn new(conn: BoxedStream) -> Result<Self, std::io::Error> {
         Ok(Self {
             conn,
+            buf: vec![0; 1024],
+            read: 0,
             next_writer: None,
             unfinished: None,
         })
@@ -144,20 +173,36 @@ impl Connection for Http1 {
         self.conn.set_timeout(timeout)
     }
 
+    fn set_nonblocking(&mut self, value: bool) -> std::io::Result<()> {
+        self.conn.set_nonblocking(value)
+    }
+
     fn next_frame(&mut self) -> Result<(Request<Self::Body>, Self::Responder), std::io::Error> {
-        if let Some((len, sender)) = self.unfinished.take() {
-            let mut buf = vec![0; len];
+        if let Some((body_idx, sender)) = &self.unfinished {
+            if self.read != self.buf.len() {
+                loop {
+                    let n = self.conn.read(&mut self.buf[self.read..])?;
+                    self.read += n;
+                }
+            }
 
-            if self.conn.read_exact(&mut buf).is_err() {
-                // Avoid blocking request tasks awaiting a body that doesn't exist.
-                let _ = sender.send(vec![]);
-            };
+            let body = self.buf[*body_idx..].to_vec();
 
-            let _ = sender.send(buf);
+            sender.send(body).expect("Failed to send body to Lazy");
+
+            self.buf.resize(1024, 0);
+            self.read = 0;
+            self.unfinished = None;
         }
 
-        let req = take_request(&mut BufReader::new(&mut self.conn)).map_err(|_| {
-            std::io::Error::new(ErrorKind::Other, "Failed to parse request from stream")
+        let n = self.conn.read(&mut self.buf[self.read..])?;
+        self.read += n;
+
+        let (req, body_idx) = take_request(&self.buf[..self.read]).map_err(|e| match e {
+            ParseError::Unfinished => {
+                std::io::Error::new(ErrorKind::WouldBlock, "Unfinished request")
+            }
+            _ => std::io::Error::new(ErrorKind::Other, "Failed to parse request from stream"),
         })?;
 
         let body_len = req
@@ -169,7 +214,18 @@ impl Connection for Http1 {
 
         let (lazy, sender) = Lazy::new();
 
-        self.unfinished = Some((body_len, sender));
+        if body_len == 0 {
+            sender
+                .send(Vec::new())
+                .expect("Failed to send body to Lazy");
+
+            self.buf.clear();
+            self.buf.resize(1024, 0);
+            self.read = 0;
+        } else {
+            self.buf.resize(body_idx + body_len, 0);
+            self.unfinished = Some((body_idx, sender));
+        }
 
         Ok((req.map(|_| lazy), self.next_writer()?))
     }
