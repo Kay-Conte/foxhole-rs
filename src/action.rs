@@ -98,7 +98,7 @@ impl IntoResponse for u16 {
 
 /// Creates a response with the content-type `application/x-binary` there may be a better MIME type
 /// to use for this.
-pub struct Raw(Vec<u8>);
+pub struct Raw(pub Vec<u8>);
 
 impl IntoResponse for Raw {
     fn response(self) -> RawResponse {
