@@ -1,5 +1,5 @@
 use std::{
-    io::Write,
+    io::{ErrorKind, Write},
     sync::mpsc::{channel, Receiver, Sender},
 };
 
@@ -48,9 +48,21 @@ where
             State::Waiting(r) => r.recv().expect("Failed to get writer from the receiver"),
         };
 
-        writer.write_all(bytes)?;
+        let mut written = 0;
 
-        writer.flush()?;
+        loop {
+            if written == bytes.len() {
+                writer.flush()?;
+
+                break;
+            }
+
+            match writer.write(&bytes[written..]) {
+                Ok(n) => written += n,
+                Err(e) if e.kind() == ErrorKind::WouldBlock => continue,
+                Err(e) => Err(e)?,
+            }
+        }
 
         let _ = self.next.send(writer);
 
