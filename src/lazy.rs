@@ -1,6 +1,6 @@
 use std::{
     cell::OnceCell,
-    sync::mpsc::{channel, Receiver, Sender},
+    sync::mpsc::{sync_channel, Receiver, SyncSender},
 };
 
 use crate::get_as_slice::GetAsSlice;
@@ -13,8 +13,8 @@ pub struct Lazy<T> {
 
 impl Lazy<Vec<u8>> {
     /// Constructs a new instance of `Lazy` and returns it's corresponding `Sender`
-    pub fn new() -> (Self, Sender<Vec<u8>>) {
-        let (sender, receiver) = channel();
+    pub fn new() -> (Self, SyncSender<Vec<u8>>) {
+        let (sender, receiver) = sync_channel(1);
 
         (
             Lazy {
