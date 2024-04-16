@@ -1,38 +1,37 @@
 //! This module provides the application entry point.
-//!
 use std::{
-    marker::PhantomData,
-    net::{TcpListener, ToSocketAddrs},
-    sync::Arc,
+    collections::HashMap,
+    io::ErrorKind,
+    sync::{mpsc::Receiver, Arc},
 };
 
 use crate::{
+    channel::{sync_channel, SyncSender},
     connection::Connection,
     layers::{BoxLayer, DefaultResponseGroup, Layer},
     routing::Router,
-    tasks::TaskPool,
+    tasks::{handle_connection, ConnectionContext, TaskPool},
     type_cache::TypeCache,
     Request, Response,
 };
 
-#[cfg(not(feature = "tls"))]
-use crate::tasks::ConnectionTask;
-
-#[cfg(feature = "tls")]
-use crate::tasks::SecuredConnectionTask;
+use mio::{net::TcpListener, Events, Interest, Poll, Token, Waker};
 
 #[cfg(feature = "tls")]
 use rustls::ServerConfig;
 
+const WAKE: Token = Token(0);
+const INCOMING: Token = Token(1);
+
 /// Main application entry point. Construct this type to run your application.
 pub struct App {
-    router: Router,
-    request_layer: BoxLayer<Request>,
-    response_layer: BoxLayer<Response>,
-    type_cache: TypeCache,
+    pub(crate) router: Router,
+    pub(crate) request_layer: BoxLayer<Request>,
+    pub(crate) response_layer: BoxLayer<Response>,
+    pub(crate) cache: Arc<TypeCache>,
 
     #[cfg(feature = "tls")]
-    tls_config: Option<ServerConfig>,
+    pub(crate) tls_config: Option<ServerConfig>,
 }
 
 impl App {
@@ -42,7 +41,7 @@ impl App {
             router: scope.into(),
             request_layer: Box::new(()),
             response_layer: Box::new(DefaultResponseGroup::new()),
-            type_cache: TypeCache::new(),
+            cache: Arc::new(TypeCache::new()),
 
             #[cfg(feature = "tls")]
             tls_config: None,
@@ -63,7 +62,7 @@ impl App {
 
     /// Sets the cache to be used by the application
     pub fn cache(mut self, cache: TypeCache) -> Self {
-        self.type_cache = cache;
+        self.cache = Arc::new(cache);
         self
     }
 
@@ -74,54 +73,95 @@ impl App {
     }
 
     /// Executes the application. This will currently never return.
-    pub fn run<C>(self, address: impl ToSocketAddrs)
+    pub fn run<C>(self, address: &str) -> Result<(), Box<dyn std::error::Error>>
     where
         C: 'static + Connection,
     {
-        let incoming = TcpListener::bind(address).expect("Could not bind to local address");
+        let mut incoming = TcpListener::bind(address.parse()?)?;
 
-        let type_cache = Arc::new(self.type_cache);
-        let router = Arc::new(self.router);
-        let request_layer = Arc::new(self.request_layer);
-        let response_layer = Arc::new(self.response_layer);
+        let shared = Arc::new(self);
+        let task_pool = Arc::new(TaskPool::new());
 
-        #[cfg(feature = "tls")]
-        let tls_config = match self.tls_config {
-            Some(conf) => Arc::new(conf),
-            None => panic!("Missing tls config"), // change message prob
-        };
+        let mut poll = Poll::new()?;
+        let mut events = Events::with_capacity(1024);
 
-        let task_pool = TaskPool::new();
+        poll.registry()
+            .register(&mut incoming, INCOMING, Interest::READABLE)?;
+
+        let mut next_token = INCOMING.0 + 1;
+
+        let waker = Arc::new(Waker::new(poll.registry(), WAKE)?);
+
+        let mut context_map: HashMap<Token, ConnectionContext<C>> = HashMap::new();
+        let (sender, receiver): (SyncSender<_>, Receiver<ConnectionContext<C>>) =
+            sync_channel(waker.clone(), 1024);
 
         loop {
-            let Ok((stream, _addr)) = incoming.accept() else {
-                continue;
+            match poll.poll(&mut events, None) {
+                Ok(_) => {}
+                Err(e) if e.kind() == ErrorKind::WouldBlock => continue,
+                Err(e) => {
+                    println!("{e:?}");
+                    break;
+                }
             };
 
-            #[cfg(feature = "tls")]
-            let task = SecuredConnectionTask::<C> {
-                task_pool: task_pool.clone(),
-                cache: type_cache.clone(),
-                stream,
-                router: router.clone(),
-                tls_config: tls_config.clone(),
-                response_layer: response_layer.clone(),
-                request_layer: request_layer.clone(),
-                phantom_data: PhantomData,
-            };
+            for event in events.iter() {
+                match event.token() {
+                    WAKE => {
+                        while let Ok(mut task) = receiver.try_recv() {
+                            poll.registry().register(
+                                &mut task.conn,
+                                task.token,
+                                Interest::READABLE,
+                            )?;
 
-            #[cfg(not(feature = "tls"))]
-            let task = ConnectionTask::<C> {
-                task_pool: task_pool.clone(),
-                cache: type_cache.clone(),
-                stream,
-                router: router.clone(),
-                response_layer: response_layer.clone(),
-                request_layer: request_layer.clone(),
-                phantom_data: PhantomData,
-            };
+                            context_map.insert(task.token.clone(), task);
+                        }
+                    }
+                    INCOMING => {
+                        while let Ok((stream, _addr)) = incoming.accept() {
+                            let mut conn = C::new(Box::new(stream))?;
 
-            task_pool.send_task(task);
+                            let token = Token(next_token);
+                            next_token += 1;
+
+                            poll.registry().register(
+                                &mut conn,
+                                token,
+                                Interest::READABLE.add(Interest::WRITABLE),
+                            )?;
+
+                            context_map.insert(
+                                token,
+                                ConnectionContext {
+                                    token,
+                                    task_pool: task_pool.clone(),
+                                    app: shared.clone(),
+                                    conn,
+                                    register: None,
+                                },
+                            );
+
+                            next_token += 1;
+                        }
+                    }
+                    token => {
+                        if !event.is_readable() {
+                            continue;
+                        }
+
+                        let mut ctx = context_map.remove(&token).unwrap();
+
+                        poll.registry().deregister(&mut ctx.conn)?;
+                        ctx.register = Some(sender.clone());
+
+                        task_pool.send_task(Box::new(move || handle_connection(ctx)))
+                    }
+                }
+            }
         }
+
+        Ok(())
     }
 }

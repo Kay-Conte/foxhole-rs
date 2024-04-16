@@ -1,11 +1,13 @@
 use std::{
     io::{ErrorKind, Read, Write},
-    net::TcpStream,
-    sync::mpsc::{Receiver, SyncSender},
-    time::Duration,
+    sync::{
+        mpsc::{Receiver, SyncSender},
+        Arc, Mutex,
+    },
 };
 
 use http::Request;
+use mio::event::Source;
 
 use crate::{
     action::RawResponse,
@@ -15,96 +17,42 @@ use crate::{
     sequential_writer::{self, SequentialWriter},
 };
 
-#[cfg(feature = "tls")]
-use crate::tls_connection::TlsConnection;
-
 /// A marker used to encapsulate the required traits for a stream used by `Http1`
-pub trait BoxedStreamMarker:
-    Read + Write + BoxedTryClone + SetTimeout + SetNonBlocking + Send + Sync
-{
-}
+pub trait BoxedStreamMarker: Read + Write + Source + Send + Sync {}
 
-impl<T> BoxedStreamMarker for T where
-    T: Read + Write + BoxedTryClone + SetTimeout + SetNonBlocking + Send + Sync
-{
-}
+impl<T> BoxedStreamMarker for T where T: Read + Write + Source + Send + Sync {}
 
-pub type BoxedStream = Box<dyn BoxedStreamMarker>;
+#[derive(Clone)]
+pub struct SharedStream(Arc<Mutex<dyn BoxedStreamMarker>>);
 
-pub trait SetNonBlocking {
-    fn set_nonblocking(&mut self, value: bool) -> std::io::Result<()>;
-}
-
-impl SetNonBlocking for TcpStream {
-    fn set_nonblocking(&mut self, value: bool) -> std::io::Result<()> {
-        TcpStream::set_nonblocking(self, value)
+impl Read for SharedStream {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        self.0.lock().unwrap().read(buf)
     }
 }
 
-#[cfg(feature = "tls")]
-impl SetNonBlocking for TlsConnection {
-    fn set_nonblocking(&mut self, value: bool) -> std::io::Result<()> {
-        self.stream.set_nonblocking(value)
+impl Write for SharedStream {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        self.0.lock().unwrap().write(buf)
     }
-}
 
-/// A trait providing a `set_timeout` function for streams
-pub trait SetTimeout {
-    /// Set the timeout for reads and writes on the current object
-    fn set_timeout(&mut self, timeout: Option<Duration>) -> std::io::Result<()>;
-}
-
-impl SetTimeout for TcpStream {
-    fn set_timeout(&mut self, timeout: Option<Duration>) -> std::io::Result<()> {
-        self.set_read_timeout(timeout)?;
-        self.set_write_timeout(timeout)
-    }
-}
-
-#[cfg(feature = "tls")]
-impl SetTimeout for TlsConnection {
-    fn set_timeout(&mut self, timeout: Option<Duration>) -> std::io::Result<()> {
-        self.stream.set_read_timeout(timeout)?;
-        self.stream.set_write_timeout(timeout)
-    }
-}
-
-/// A trait providing a method of cloning for boxed streams
-pub trait BoxedTryClone {
-    fn try_clone(&self) -> std::io::Result<BoxedStream>;
-}
-
-impl BoxedTryClone for TcpStream {
-    fn try_clone(&self) -> std::io::Result<BoxedStream> {
-        self.try_clone().map(|s| Box::new(s) as BoxedStream)
-    }
-}
-
-#[cfg(feature = "tls")]
-impl BoxedTryClone for TlsConnection {
-    fn try_clone(&self) -> std::io::Result<BoxedStream> {
-        self.stream
-            .try_clone()
-            .map(|s| Box::new(TlsConnection::new(s, self.conn.clone())) as BoxedStream)
+    fn flush(&mut self) -> std::io::Result<()> {
+        self.0.lock().unwrap().flush()
     }
 }
 
 /// A trait providing necessary functions to handle a connection
-pub trait Connection: Sized + Send {
+pub trait Connection: Source + Sized + Send {
     type Body: 'static + GetAsSlice + Send;
     type Responder: 'static + Responder;
 
-    fn new(conn: BoxedStream) -> Result<Self, std::io::Error>;
-
-    fn set_timeout(&mut self, timeout: Option<Duration>) -> Result<(), std::io::Error>;
-
-    fn set_nonblocking(&mut self, value: bool) -> std::io::Result<()>;
+    fn new(conn: Box<dyn BoxedStreamMarker>) -> Result<Self, std::io::Error>;
 
     /// Reading of the body of the previous frame may occur on subsequent calls depending on
     /// implementation
-    fn next_frame(&mut self) -> Result<(Request<Self::Body>, Self::Responder), std::io::Error>;
+    fn poll(&mut self) -> Result<(Request<Self::Body>, Self::Responder), std::io::Error>;
 
-    fn upgrade(self) -> BoxedStream;
+    fn upgrade(self) -> SharedStream;
 }
 
 /// A trait providing necessary functionality to respond to a connection
@@ -124,15 +72,15 @@ pub trait Responder: Sized + Send {
 
 /// HTTP 1.1
 pub struct Http1 {
-    conn: BoxedStream,
+    conn: SharedStream,
     buf: Vec<u8>,
     read: usize,
-    next_writer: Option<Receiver<BoxedStream>>,
+    next_writer: Option<Receiver<SharedStream>>,
     unfinished: Option<(usize, SyncSender<Vec<u8>>)>,
 }
 
 impl Http1 {
-    fn next_writer(&mut self) -> Result<SequentialWriter<BoxedStream>, std::io::Error> {
+    fn next_writer(&mut self) -> Result<SequentialWriter<SharedStream>, std::io::Error> {
         Ok(match self.next_writer.take() {
             Some(writer) => {
                 let (writer, receiver) =
@@ -145,7 +93,7 @@ impl Http1 {
 
             None => {
                 let (writer, receiver) =
-                    SequentialWriter::new(sequential_writer::State::Writer(self.conn.try_clone()?));
+                    SequentialWriter::new(sequential_writer::State::Writer(self.conn.clone()));
 
                 self.next_writer = Some(receiver);
 
@@ -155,13 +103,45 @@ impl Http1 {
     }
 }
 
+impl Source for Http1 {
+    fn register(
+        &mut self,
+        registry: &mio::Registry,
+        token: mio::Token,
+        interests: mio::Interest,
+    ) -> std::io::Result<()> {
+        self.conn
+            .0
+            .lock()
+            .unwrap()
+            .register(registry, token, interests)
+    }
+
+    fn reregister(
+        &mut self,
+        registry: &mio::Registry,
+        token: mio::Token,
+        interests: mio::Interest,
+    ) -> std::io::Result<()> {
+        self.conn
+            .0
+            .lock()
+            .unwrap()
+            .reregister(registry, token, interests)
+    }
+
+    fn deregister(&mut self, registry: &mio::Registry) -> std::io::Result<()> {
+        self.conn.0.lock().unwrap().deregister(registry)
+    }
+}
+
 impl Connection for Http1 {
     type Body = Lazy<Vec<u8>>;
-    type Responder = SequentialWriter<BoxedStream>;
+    type Responder = SequentialWriter<SharedStream>;
 
-    fn new(conn: BoxedStream) -> Result<Self, std::io::Error> {
+    fn new(conn: Box<dyn BoxedStreamMarker>) -> Result<Self, std::io::Error> {
         Ok(Self {
-            conn,
+            conn: SharedStream(Arc::new(Mutex::new(conn))),
             buf: vec![0; 1024],
             read: 0,
             next_writer: None,
@@ -169,15 +149,7 @@ impl Connection for Http1 {
         })
     }
 
-    fn set_timeout(&mut self, timeout: Option<Duration>) -> Result<(), std::io::Error> {
-        self.conn.set_timeout(timeout)
-    }
-
-    fn set_nonblocking(&mut self, value: bool) -> std::io::Result<()> {
-        self.conn.set_nonblocking(value)
-    }
-
-    fn next_frame(&mut self) -> Result<(Request<Self::Body>, Self::Responder), std::io::Error> {
+    fn poll(&mut self) -> Result<(Request<Self::Body>, Self::Responder), std::io::Error> {
         if let Some((body_idx, sender)) = &self.unfinished {
             if self.read != self.buf.len() {
                 loop {
@@ -230,7 +202,7 @@ impl Connection for Http1 {
         Ok((req.map(|_| lazy), self.next_writer()?))
     }
 
-    fn upgrade(self) -> BoxedStream {
+    fn upgrade(self) -> SharedStream {
         self.conn
     }
 }

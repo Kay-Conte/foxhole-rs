@@ -1,5 +1,6 @@
 #![doc = include_str!("../README.md")]
 
+mod channel;
 mod handler;
 mod lazy;
 mod sequential_writer;

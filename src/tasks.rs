@@ -1,273 +1,75 @@
 use std::{
     collections::{HashMap, VecDeque},
-    io::ErrorKind,
-    marker::PhantomData,
-    net::TcpStream,
     sync::{
         atomic::{AtomicUsize, Ordering},
         Arc, Condvar, Mutex,
     },
-    time::{Duration, Instant},
+    time::Duration,
 };
 
-use http::Request;
-
 use crate::{
+    channel,
     connection::{Connection, Responder},
     get_as_slice::GetAsSlice,
     layers::BoxLayer,
-    type_cache::TypeCache,
-    url_decoding, Action, IntoResponse, Response, Router,
+    url_decoding, Action, App, IntoResponse, Request, Response, Router, TypeCache,
 };
+use mio::Token;
 
-const MIN_THREADS: usize = 20;
-
-#[cfg(feature = "tls")]
-use std::sync::RwLock;
-
-#[cfg(feature = "tls")]
-use rustls::{ServerConfig, ServerConnection};
-
-#[cfg(feature = "tls")]
-use crate::tls_connection::TlsConnection;
+const MIN_THREADS: usize = 4;
 
 /// Request with a boxed body implementing `GetAsSlice` This is the standard request type
 /// throughout the library
-pub type BoxedBodyRequest = Request<Box<dyn 'static + GetAsSlice + Send>>;
+pub type BoxedBodyRequest = http::Request<Box<dyn 'static + GetAsSlice + Send>>;
 
-pub(crate) trait Task {
-    fn run(self: Box<Self>);
+pub(crate) struct ConnectionContext<C> {
+    pub app: Arc<App>,
+    pub task_pool: Arc<TaskPool>,
+    pub token: Token,
+    pub conn: C,
+    pub register: Option<channel::SyncSender<ConnectionContext<C>>>,
 }
 
-pub(crate) struct ConnectionTask<C> {
-    pub task_pool: TaskPool,
-
-    /// An application global type cache
-    pub cache: Arc<TypeCache>,
-
-    pub stream: TcpStream,
-
-    /// A handle to the applications router tree
-    pub router: Arc<Router>,
-
-    pub request_layer: Arc<BoxLayer<crate::Request>>,
-    pub response_layer: Arc<BoxLayer<Response>>,
-
-    pub phantom_data: PhantomData<C>,
-}
-
-impl<C> Task for ConnectionTask<C>
+pub(crate) fn handle_connection<C>(mut ctx: ConnectionContext<C>)
 where
-    C: 'static + Connection,
+    C: Connection,
 {
-    fn run(self: Box<Self>) {
-        let Ok(mut connection) = C::new(Box::new(self.stream)) else {
-            return;
-        };
+    let Ok((req, res)) = ctx.conn.poll() else {
+        return;
+    };
 
-        connection
-            .set_nonblocking(true)
-            .expect("Shouldn't fail unless duration is 0");
+    let req: Request = req.map(|i| {
+        let b: Box<dyn 'static + GetAsSlice + Send> = Box::new(i);
 
-        let mut timeout = Duration::from_secs(5);
-        let mut last = Instant::now();
+        b
+    });
 
-        loop {
-            if timeout.is_zero() {
-                break;
-            }
+    let req_ctx = RequestContext {
+        app: ctx.app.clone(),
+        request: req,
+        responder: res,
+        upgrade: None,
+    };
 
-            let (request, responder) = match connection.next_frame() {
-                Ok((request, responder)) => (request, responder),
-                Err(e) if e.kind() == ErrorKind::WouldBlock => {
-                    let now = Instant::now();
-                    let elapsed = now - last;
+    ctx.task_pool
+        .send_task(Box::new(move || handle_request(req_ctx)));
 
-                    timeout = timeout.saturating_sub(elapsed);
-
-                    last = now;
-
-                    continue;
-                }
-                Err(_) => break,
-            };
-
-            let r = request.map(|i| {
-                let b: Box<dyn 'static + GetAsSlice + Send> = Box::new(i);
-
-                b
-            });
-
-            let mut should_close: bool = true;
-
-            if let Some(header) = r.headers().get("connection").and_then(|i| i.to_str().ok()) {
-                #[cfg(feature = "websocket")]
-                if header.to_lowercase() == "upgrade" {
-                    self.task_pool.send_task(RequestTask {
-                        cache: self.cache.clone(),
-                        upgrade: Some(connection),
-                        request: r,
-                        responder,
-                        router: self.router.clone(),
-                        request_layer: self.request_layer.clone(),
-                        response_layer: self.response_layer.clone(),
-                    });
-
-                    break;
-                }
-
-                should_close = header != "keep-alive";
-            }
-
-            self.task_pool.send_task(RequestTask::<_, C> {
-                cache: self.cache.clone(),
-                upgrade: None,
-                request: r,
-                responder,
-                router: self.router.clone(),
-                request_layer: self.request_layer.clone(),
-                response_layer: self.response_layer.clone(),
-            });
-
-            if should_close {
-                break;
-            }
-        }
+    if let Some(mut register) = ctx.register.clone() {
+        register.send(ctx).unwrap();
     }
 }
 
-#[cfg(feature = "tls")]
-pub(crate) struct SecuredConnectionTask<C> {
-    pub task_pool: TaskPool,
-
-    pub cache: Arc<TypeCache>,
-
-    pub stream: TcpStream,
-
-    pub router: Arc<Router>,
-
-    pub tls_config: Arc<ServerConfig>,
-
-    pub request_layer: Arc<BoxLayer<crate::Request>>,
-    pub response_layer: Arc<BoxLayer<Response>>,
-
-    pub phantom_data: PhantomData<C>,
-}
-
-#[cfg(feature = "tls")]
-impl<C> Task for SecuredConnectionTask<C>
-where
-    C: 'static + Connection,
-{
-    fn run(mut self: Box<Self>) {
-        let Ok(mut connection) = ServerConnection::new(self.tls_config.clone()) else {
-            return;
-        };
-
-        match connection.complete_io(&mut self.stream) {
-            Ok(_) => {}
-            Err(_) => {
-                return;
-            }
-        };
-
-        let Ok(mut connection) = C::new(Box::new(TlsConnection::new(
-            self.stream,
-            Arc::new(RwLock::new(connection)),
-        ))) else {
-            return;
-        };
-
-        connection.set_nonblocking(true).expect("Shouldn't fail");
-
-        let mut timeout = Duration::from_secs(5);
-        let mut last = Instant::now();
-
-        loop {
-            let (request, responder) = match connection.next_frame() {
-                Ok((request, responder)) => (request, responder),
-                Err(e) if e.kind() == ErrorKind::WouldBlock => {
-                    let now = Instant::now();
-                    let elapsed = now - last;
-
-                    timeout = timeout.saturating_sub(elapsed);
-
-                    if timeout == Duration::from_secs(0) {
-                        break;
-                    }
-
-                    last = now;
-
-                    continue;
-                }
-                _ => break,
-            };
-
-            let r = request.map(|i| {
-                let b: Box<dyn 'static + GetAsSlice + Send> = Box::new(i);
-
-                b
-            });
-
-            let mut should_close: bool = true;
-
-            if let Some(header) = r.headers().get("connection").and_then(|i| i.to_str().ok()) {
-                if header.to_lowercase() == "upgrade" {
-                    self.task_pool.send_task(RequestTask {
-                        cache: self.cache.clone(),
-                        upgrade: Some(connection),
-                        request: r,
-                        responder,
-                        router: self.router.clone(),
-                        request_layer: self.request_layer.clone(),
-                        response_layer: self.response_layer.clone(),
-                    });
-
-                    break;
-                }
-
-                should_close = header != "keep-alive";
-            }
-
-            self.task_pool.send_task(RequestTask::<_, C> {
-                cache: self.cache.clone(),
-                upgrade: None,
-                request: r,
-                responder,
-                router: self.router.clone(),
-                request_layer: self.request_layer.clone(),
-                response_layer: self.response_layer.clone(),
-            });
-
-            if should_close {
-                break;
-            }
-        }
-    }
-}
-
-pub(crate) struct RequestTask<R, C> {
-    pub cache: Arc<TypeCache>,
-
+pub(crate) struct RequestContext<R> {
+    pub app: Arc<App>,
     pub request: BoxedBodyRequest,
-
     pub responder: R,
-
-    /// A handle to the applications router tree
-    pub router: Arc<Router>,
-
-    /// This field is only used on `websocket`
-    #[allow(dead_code)]
-    pub upgrade: Option<C>,
-
-    pub request_layer: Arc<BoxLayer<crate::Request>>,
-    pub response_layer: Arc<BoxLayer<Response>>,
+    pub upgrade: Option<()>,
 }
 
 fn respond_fallback<R>(
     ctx: RequestState,
-    router: Arc<Router>,
-    response_layer: Arc<BoxLayer<Response>>,
+    router: &Router,
+    response_layer: &BoxLayer<Response>,
     responder: R,
 ) -> std::io::Result<()>
 where
@@ -287,73 +89,93 @@ where
     Ok(())
 }
 
-impl<R, C> Task for RequestTask<R, C>
+pub(crate) fn handle_request<R>(mut ctx: RequestContext<R>)
 where
     R: Responder,
-    C: Connection,
 {
-    fn run(mut self: Box<Self>) {
-        self.request_layer.execute(&mut self.request);
+    ctx.app.request_layer.execute(&mut ctx.request);
 
-        let path = self.request.uri().to_string();
+    let path = ctx.request.uri().to_string();
 
-        let (path, query) = path.split_once("?").unwrap_or((&path, ""));
+    let (path, query) = path.split_once("?").unwrap_or((&path, ""));
 
-        let Some(query) = url_decoding::map(query) else {
-            let _ = self.responder.respond(400u16.response());
+    let Some(query) = url_decoding::map(query) else {
+        let _ = ctx.responder.respond(400u16.response());
+
+        return;
+    };
+
+    let state = RequestState {
+        cache: ctx.app.cache.clone(),
+        request: ctx.request,
+        query,
+    };
+
+    let Some((handler, captures)) = ctx.app.router.route(path) else {
+        let _ = respond_fallback(
+            state,
+            &ctx.app.router,
+            &ctx.app.response_layer,
+            ctx.responder,
+        );
+
+        return;
+    };
+
+    let Some(system) = handler.get(state.request.method()) else {
+        let _ = respond_fallback(
+            state,
+            &ctx.app.router,
+            &ctx.app.response_layer,
+            ctx.responder,
+        );
+
+        return;
+    };
+
+    let action = system.call(&state, captures);
+
+    match action {
+        Action::Respond(mut r) => {
+            ctx.app.response_layer.execute(&mut r);
+
+            let _ = ctx.responder.respond(r);
 
             return;
-        };
-
-        let ctx = RequestState {
-            global_cache: self.cache,
-            request: self.request,
-            query,
-        };
-
-        let Some((handler, captures)) = self.router.route(&path) else {
-            let _ = respond_fallback(ctx, self.router, self.response_layer, self.responder);
+        }
+        #[cfg(feature = "websocket")]
+        Action::Upgrade(r, f) => {
+            // Todo move this handling to the constructor of `Action::Upgrade`
+            todo!();
+            // let Some(connection) = ctx.upgrade else {
+            //     return;
+            // };
+            //
+            // let response = r(&ctx.request);
+            // let _ = ctx.responder.respond(response);
+            //
+            // f(connection.upgrade());
+            //
+            // return;
+        }
+        Action::None => {
+            let _ = respond_fallback(
+                state,
+                &ctx.app.router,
+                &ctx.app.response_layer,
+                ctx.responder,
+            );
 
             return;
-        };
-
-        let Some(system) = handler.get(ctx.request.method()) else {
-            let _ = respond_fallback(ctx, self.router, self.response_layer, self.responder);
-            
-            return;
-        };
-
-        let action = system.call(&ctx, captures);
-
-        match action {
-            Action::Respond(mut r) => {
-                self.response_layer.execute(&mut r);
-
-                let _ = self.responder.respond(r);
-
-                return;
-            }
-            #[cfg(feature = "websocket")]
-            Action::Upgrade(r, f) => {
-                // Todo move this handling to the constructor of `Action::Upgrade`
-                let Some(connection) = self.upgrade else {
-                    return;
-                };
-
-                let response = r(&ctx.request);
-                let _ = self.responder.respond(response);
-
-                f(connection.upgrade());
-
-                return;
-            }
-            Action::None => {
-                let _ = respond_fallback(ctx, self.router, self.response_layer, self.responder);
-
-                return;
-            }
         }
     }
+}
+
+/// Holds the state of the request handling. This can be accessed via the `Resolve` trait.
+pub struct RequestState {
+    pub cache: Arc<TypeCache>,
+    pub request: BoxedBodyRequest,
+    pub query: HashMap<String, String>,
 }
 
 struct Registration<'a> {
@@ -372,16 +194,10 @@ impl<'a> Drop for Registration<'a> {
         self.nb.fetch_sub(1, Ordering::Release);
     }
 }
-/// Holds the state of the request handling. This can be accessed via the `Resolve` trait.
-pub struct RequestState {
-    pub global_cache: Arc<TypeCache>,
-    pub request: BoxedBodyRequest,
-    pub query: HashMap<String, String>,
-}
 
 pub struct Shared {
     /// Pool of tasks that need to be run
-    pool: Mutex<VecDeque<Box<dyn Task + Send + 'static>>>,
+    pool: Mutex<VecDeque<Box<dyn FnOnce() + Send + 'static>>>,
 
     /// Conditional var used to sleep and wake threads
     pub condvar: Condvar,
@@ -423,7 +239,7 @@ impl TaskPool {
     /// likely remain until there is a graceful shutdown mechanism
     ///
     /// This function can also panic on 0 duration.
-    fn spawn_thread(&self, initial_task: Option<Box<dyn Task + Send>>) {
+    fn spawn_thread(&self, initial_task: Option<Box<dyn FnOnce() + 'static + Send>>) {
         let shared = self.shared.clone();
 
         std::thread::spawn(move || {
@@ -431,7 +247,7 @@ impl TaskPool {
             let _active = Registration::new(&shared.active_tasks);
 
             if let Some(t) = initial_task {
-                t.run();
+                t();
             }
 
             loop {
@@ -462,7 +278,7 @@ impl TaskPool {
 
                 drop(pool);
 
-                task.run();
+                task();
             }
         });
     }
@@ -474,7 +290,7 @@ impl TaskPool {
     /// unhandled in the foreseeable future until a graceful shutdown mechanism is provided.
     pub fn send_task<T>(&self, task: T)
     where
-        T: Task + Send + 'static,
+        T: FnOnce() + 'static + Send,
     {
         let mut queue = self.shared.pool.lock().unwrap();
 
