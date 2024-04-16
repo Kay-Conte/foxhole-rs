@@ -1,8 +1,8 @@
 //! This module provides the application entry point.
 use std::{
     collections::HashMap,
-    io::ErrorKind,
-    sync::{mpsc::Receiver, Arc},
+    io,
+    sync::{mpsc::Receiver, Arc, RwLock},
 };
 
 use crate::{
@@ -18,7 +18,13 @@ use crate::{
 use mio::{net::TcpListener, Events, Interest, Poll, Token, Waker};
 
 #[cfg(feature = "tls")]
+use crate::tls_connection::TlsConnection;
+
+#[cfg(feature = "tls")]
 use rustls::ServerConfig;
+
+#[cfg(feature = "tls")]
+use rustls::ServerConnection;
 
 const WAKE: Token = Token(0);
 const INCOMING: Token = Token(1);
@@ -31,7 +37,7 @@ pub struct App {
     pub(crate) cache: Arc<TypeCache>,
 
     #[cfg(feature = "tls")]
-    pub(crate) tls_config: Option<ServerConfig>,
+    pub(crate) tls_config: Option<Arc<ServerConfig>>,
 }
 
 impl App {
@@ -68,7 +74,7 @@ impl App {
 
     #[cfg(feature = "tls")]
     pub fn tls_config(mut self, tls_config: ServerConfig) -> Self {
-        self.tls_config = Some(tls_config);
+        self.tls_config = Some(Arc::new(tls_config));
         self
     }
 
@@ -77,6 +83,11 @@ impl App {
     where
         C: 'static + Connection,
     {
+        #[cfg(feature = "tls")]
+        let Some(tls_config) = self.tls_config.clone() else {
+            return Err("Missing Tls Config".into());
+        };
+
         let mut incoming = TcpListener::bind(address.parse()?)?;
 
         let shared = Arc::new(self);
@@ -99,7 +110,7 @@ impl App {
         loop {
             match poll.poll(&mut events, None) {
                 Ok(_) => {}
-                Err(e) if e.kind() == ErrorKind::WouldBlock => continue,
+                Err(e) if e.kind() == io::ErrorKind::WouldBlock => continue,
                 Err(e) => {
                     println!("{e:?}");
                     break;
@@ -120,7 +131,16 @@ impl App {
                         }
                     }
                     INCOMING => {
-                        while let Ok((stream, _addr)) = incoming.accept() {
+                        while let Ok((mut stream, _addr)) = incoming.accept() {
+                            #[cfg(feature = "tls")]
+                            let stream = {
+                                let mut connection = ServerConnection::new(tls_config.clone())?;
+
+                                connection.complete_io(&mut stream)?;
+
+                                TlsConnection::new(stream, Arc::new(RwLock::new(connection)))
+                            };
+
                             let mut conn = C::new(Box::new(stream))?;
 
                             let token = Token(next_token);

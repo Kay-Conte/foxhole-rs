@@ -14,6 +14,7 @@ use crate::{
     layers::BoxLayer,
     url_decoding, Action, App, IntoResponse, Request, Response, Router, TypeCache,
 };
+
 use mio::Token;
 
 const MIN_THREADS: usize = 4;
@@ -32,7 +33,7 @@ pub(crate) struct ConnectionContext<C> {
 
 pub(crate) fn handle_connection<C>(mut ctx: ConnectionContext<C>)
 where
-    C: Connection,
+    C: 'static + Connection,
 {
     let Ok((req, res)) = ctx.conn.poll() else {
         return;
@@ -44,7 +45,7 @@ where
         b
     });
 
-    let req_ctx = RequestContext {
+    let req_ctx = RequestContext::<C, C::Responder> {
         app: ctx.app.clone(),
         request: req,
         responder: res,
@@ -59,11 +60,11 @@ where
     }
 }
 
-pub(crate) struct RequestContext<R> {
+pub(crate) struct RequestContext<C, R> {
     pub app: Arc<App>,
     pub request: BoxedBodyRequest,
     pub responder: R,
-    pub upgrade: Option<()>,
+    pub upgrade: Option<C>,
 }
 
 fn respond_fallback<R>(
@@ -89,8 +90,9 @@ where
     Ok(())
 }
 
-pub(crate) fn handle_request<R>(mut ctx: RequestContext<R>)
+pub(crate) fn handle_request<C, R>(mut ctx: RequestContext<C, R>)
 where
+    C: Connection,
     R: Responder,
 {
     ctx.app.request_layer.execute(&mut ctx.request);
@@ -145,18 +147,16 @@ where
         }
         #[cfg(feature = "websocket")]
         Action::Upgrade(r, f) => {
-            // Todo move this handling to the constructor of `Action::Upgrade`
-            todo!();
-            // let Some(connection) = ctx.upgrade else {
-            //     return;
-            // };
-            //
-            // let response = r(&ctx.request);
-            // let _ = ctx.responder.respond(response);
-            //
-            // f(connection.upgrade());
-            //
-            // return;
+            let Some(connection) = ctx.upgrade else {
+                return;
+            };
+
+            let response = r(&state.request);
+            let _ = ctx.responder.respond(response);
+
+            f(connection.upgrade());
+
+            return;
         }
         Action::None => {
             let _ = respond_fallback(
