@@ -58,7 +58,7 @@ where
         ctx: &'c RequestState,
         _captures: &mut Captures,
     ) -> ResolveGuard<Self::Output<'c>> {
-        ctx.global_cache.get::<K>().map(|v| Query(v)).into()
+        ctx.cache.get::<K>().map(|v| Query(v)).into()
     }
 }
 

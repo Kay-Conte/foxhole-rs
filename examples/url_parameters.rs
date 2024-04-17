@@ -27,5 +27,9 @@ fn main() {
 
     println!("Try connecting on a browser at 'http://localhost:8080/user/USERNAME'");
 
-    App::builder(router).run::<Http1>("0.0.0.0:8080");
+    let res = App::builder(router).run::<Http1>("0.0.0.0:8080");
+
+    if let Err(e) = res {
+        println!("{e:?}");
+    };
 }

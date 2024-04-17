@@ -1,8 +1,9 @@
 use std::{
     io::{Read, Write},
-    net::TcpStream,
     sync::{Arc, RwLock},
 };
+
+use mio::{event::Source, net::TcpStream};
 
 use rustls::ServerConnection;
 
@@ -34,5 +35,29 @@ impl Write for TlsConnection {
             .unwrap()
             .complete_io(&mut self.stream)
             .map(|_| ())
+    }
+}
+
+impl Source for TlsConnection {
+    fn register(
+        &mut self,
+        registry: &mio::Registry,
+        token: mio::Token,
+        interests: mio::Interest,
+    ) -> std::io::Result<()> {
+        self.stream.register(registry, token, interests)
+    }
+
+    fn reregister(
+        &mut self,
+        registry: &mio::Registry,
+        token: mio::Token,
+        interests: mio::Interest,
+    ) -> std::io::Result<()> {
+        self.stream.reregister(registry, token, interests)
+    }
+
+    fn deregister(&mut self, registry: &mio::Registry) -> std::io::Result<()> {
+        self.stream.deregister(registry)
     }
 }

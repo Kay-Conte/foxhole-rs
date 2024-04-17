@@ -33,7 +33,11 @@ fn main() {
 
     println!("Try connecting with a browser at 'http://localhost:8080'");
 
-    App::builder(router)
+    let res = App::builder(router)
         .cache(cache)
         .run::<Http1>("0.0.0.0:8080");
+
+    if let Err(e) = res {
+        println!("{e:?}");
+    };
 }

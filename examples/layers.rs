@@ -27,8 +27,12 @@ fn main() {
 
     println!("Running on '127.0.0.1:8080'");
 
-    App::builder(router)
+    let res = App::builder(router)
         .request_layer(Logger)
         .response_layer(DefaultResponseGroup::new().add_layer(Logger))
         .run::<Http1>("127.0.0.1:8080");
+
+    if let Err(e) = res {
+        println!("{e:?}");
+    };
 }

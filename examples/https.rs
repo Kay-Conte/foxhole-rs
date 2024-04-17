@@ -32,9 +32,13 @@ fn main() {
 
     println!("Running on localhost:8080");
 
-    App::builder(router)
+    let res = App::builder(router)
         .tls_config(config)
         .run::<Http1>("127.0.0.1:8080");
+
+    if let Err(e) = res {
+        println!("{e:?}");
+    };
 }
 
 #[cfg(not(feature = "tls"))]
