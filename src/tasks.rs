@@ -27,7 +27,7 @@ pub(crate) struct ConnectionContext<C> {
     pub app: Arc<App>,
     pub task_pool: Arc<TaskPool>,
     pub token: Token,
-    pub conn: C,
+    pub conn: Option<C>,
     pub register: Option<channel::SyncSender<ConnectionContext<C>>>,
 }
 
@@ -35,7 +35,11 @@ pub(crate) fn handle_connection<C>(mut ctx: ConnectionContext<C>)
 where
     C: 'static + Connection,
 {
-    let Ok((req, res)) = ctx.conn.poll() else {
+    let Some(conn) = &mut ctx.conn else {
+        return;
+    };
+
+    let Ok((req, res)) = conn.poll() else {
         return;
     };
 
@@ -45,18 +49,32 @@ where
         b
     });
 
+    let mut last_request = true;
+
+    let upgrade = match req.headers().get("connection") {
+        Some(v) if v == "upgrade" => ctx.conn.take(),
+        Some(v) if v == "keep-alive" => {
+            last_request = false;
+            None
+        }
+        Some(v) if v == "close" => None,
+        _ => return,
+    };
+
     let req_ctx = RequestContext::<C, C::Responder> {
         app: ctx.app.clone(),
         request: req,
         responder: res,
-        upgrade: None,
+        upgrade,
     };
 
     ctx.task_pool
         .send_task(Box::new(move || handle_request(req_ctx)));
 
-    if let Some(mut register) = ctx.register.clone() {
-        register.send(ctx).unwrap();
+    if !last_request {
+        if let Some(mut register) = ctx.register.clone() {
+            register.send(ctx).unwrap();
+        }
     }
 }
 

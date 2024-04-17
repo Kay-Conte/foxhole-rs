@@ -121,11 +121,12 @@ impl App {
                 match event.token() {
                     WAKE => {
                         while let Ok(mut task) = receiver.try_recv() {
-                            poll.registry().register(
-                                &mut task.conn,
-                                task.token,
-                                Interest::READABLE,
-                            )?;
+                            let Some(conn) = &mut task.conn else {
+                                continue;
+                            };
+
+                            poll.registry()
+                                .register(conn, task.token, Interest::READABLE)?;
 
                             context_map.insert(task.token.clone(), task);
                         }
@@ -158,7 +159,7 @@ impl App {
                                     token,
                                     task_pool: task_pool.clone(),
                                     app: shared.clone(),
-                                    conn,
+                                    conn: Some(conn),
                                     register: None,
                                 },
                             );
@@ -173,7 +174,11 @@ impl App {
 
                         let mut ctx = context_map.remove(&token).unwrap();
 
-                        poll.registry().deregister(&mut ctx.conn)?;
+                        let Some(conn) = &mut ctx.conn else {
+                            continue;
+                        };
+
+                        poll.registry().deregister(conn)?;
                         ctx.register = Some(sender.clone());
 
                         task_pool.send_task(Box::new(move || handle_connection(ctx)))
