@@ -1,10 +1,13 @@
-use std::{collections::VecDeque, io::ErrorKind, time::Duration};
+use std::{
+    collections::VecDeque,
+    io::{ErrorKind, Read, Write},
+};
 
 use base64::{engine::general_purpose::STANDARD, Engine};
 use sha1::{Digest, Sha1};
 
 use crate::{
-    action::IntoAction, connection::BoxedStream, Action, IntoResponse, Request, Resolve,
+    action::IntoAction, connection::SharedStream, Action, IntoResponse, Request, Resolve,
     ResolveGuard, Response,
 };
 
@@ -110,18 +113,13 @@ pub enum Frame {
 
 /// Provides framing of a websocket 13 connection.
 pub struct WebsocketConnection {
-    inner: BoxedStream,
+    inner: SharedStream,
 }
 
 impl WebsocketConnection {
     /// Creates a new instance of a `WebsocketConnection`
-    pub fn new(stream: BoxedStream) -> Self {
+    pub fn new(stream: SharedStream) -> Self {
         Self { inner: stream }
-    }
-
-    /// Sets the timeout of the underlying stream
-    pub fn set_timeout(&mut self, timeout: Option<Duration>) -> std::io::Result<()> {
-        self.inner.set_timeout(timeout)
     }
 
     /// Gets the next websocket frame from the stream. Note: this will error on the default timeout

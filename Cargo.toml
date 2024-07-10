@@ -17,6 +17,9 @@ websocket = ["sha1", "base64"]
 
 [dependencies]
 http = "0.2.9"
+
+mio = { version = "0.8.11", features = ["os-poll", "net"] }
+
 rustls = { version = "0.23.2", optional = true }
 
 chrono = { version = "0.4.35", optional = true }

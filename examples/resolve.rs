@@ -27,5 +27,9 @@ fn main() {
 
     println!("Running on '127.0.0.1:8080'");
 
-    App::builder(router).run::<Http1>("127.0.0.1:8080");
+    let res = App::builder(router).run::<Http1>("127.0.0.1:8080");
+
+    if let Err(e) = res {
+        println!("{e:?}");
+    };
 }
