@@ -188,7 +188,7 @@ impl Connection for Http1 {
 
             let body = self.buf[*body_idx..].to_vec();
 
-            sender.send(body).expect("Failed to send body to Lazy");
+            let _ = sender.send(body);
 
             self.buf.resize(1024, 0);
             self.read = 0;
