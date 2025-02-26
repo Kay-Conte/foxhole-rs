@@ -1,7 +1,7 @@
 use std::{
     io::{ErrorKind, Read, Write},
     net::TcpStream,
-    sync::mpsc::{Receiver, Sender},
+    sync::mpsc::{Receiver, SyncSender},
     time::Duration,
 };
 
@@ -128,7 +128,7 @@ pub struct Http1 {
     buf: Vec<u8>,
     read: usize,
     next_writer: Option<Receiver<BoxedStream>>,
-    unfinished: Option<(usize, Sender<Vec<u8>>)>,
+    unfinished: Option<(usize, SyncSender<Vec<u8>>)>,
 }
 
 impl Http1 {

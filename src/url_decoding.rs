@@ -37,9 +37,13 @@ pub fn map(encoded: &str) -> Option<HashMap<String, String>> {
             continue;
         }
 
-        let Some((key, value)) = pair.split_once("=") else {
-            return None;
+        let mut pair = pair.split("=");
+
+        let Some(key) = pair.next() else {
+            break;
         };
+
+        let value = pair.next().unwrap_or("");
 
         map.insert(key.to_string(), value.to_string());
     }
