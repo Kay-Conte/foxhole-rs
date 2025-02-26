@@ -1,26 +1,34 @@
 # [unreleased]
 
 ### Added
+
 - Url query parameter support
 - New `Router` type and implementation
 - Fallback handler on `Router`
 - Websocket support under feature flag `websocket`
 - Resolvable types:
-    - `Option<T>`
-    - `Url`
-    - `HeaderMap`
-    - `ArgMap`
+  - `Option<T>`
+  - `Url`
+  - `HeaderMap`
+  - `ArgMap`
 
 ### Changed
+
 - `Resolve` no longer takes a lifetime in favor of generic associated lifetime
 
 ### Removed
+
 - All method guards, use `foxhole::Method` now in combination with the new `Router
 - `Scope` in favor of `Router`
+
+### BugFixes
+
+- Removed expect where an error is sometimes acceptable in "tasks". This should not have been the case regardless, instead favoring error handling.
 
 # [0.4.0]
 
 ### Added
+
 - `Layer` trait and `LayerGroup` structure.
 - `SetContentLength` Layer
 - `SetDate` Layer
@@ -28,13 +36,14 @@
 - Https/Tls support under feature flag 'tls'
 - Http1 connection handler
 - Various new `Resolve` and `Response` types
-  - `&[u8]` is now resolve, representing the raw body of the request 
+  - `&[u8]` is now resolve, representing the raw body of the request
   - `&str` is now resolve, representing the str representation of the request
   - `Raw` a response with the `application/x-binary` content type hint
   - `Css` a response with the `text/css` content type hint
   - `Js` a response with the `text/javascript` content type hint
 
 ### Changed
+
 - Renamed `Route` to `Scope`
 - The `TypeCache` is no longer behind an `RwLock`
 - Changed `framework` to a builder pattern
@@ -43,17 +52,21 @@
 - `run` and `run_with_cache` now take a generic implementing `Connection` used as the tcpstream handler.
 
 ### Fixed
+
 - A bug where requests would sometimes not be handled until another request was received.
 
 # [0.3.0]
 
 ### Added
+
 - Body reading example `body.rs`
 
 ### Removed
+
 - Cargo.lock is no longer synced
 
-### Changed 
+### Changed
+
 - `Vegemite` is now `Foxhole`
 - `Resolve` trait now takes a lifetime and is capable of returning refernces
   to the state

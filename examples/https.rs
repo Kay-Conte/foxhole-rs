@@ -1,14 +1,20 @@
+#[cfg(feature = "tls")]
 use std::io::BufReader;
 
+#[cfg(feature = "tls")]
 use foxhole::{action::Html, App, Http1, Method::Get, Router};
 
 #[cfg(feature = "tls")]
 use rustls::ServerConfig;
 
 // ! These are dummy files. Replace them with real cert and key.
+#[cfg(feature = "tls")]
 const CERT_FILE: &[u8] = include_bytes!("./auth/cert.pem");
+
+#[cfg(feature = "tls")]
 const KEY_FILE: &[u8] = include_bytes!("./auth/key.pem");
 
+#[cfg(feature = "tls")]
 fn get() -> Html {
     Html("<h1> Foxhole! </h1>".to_string())
 }
