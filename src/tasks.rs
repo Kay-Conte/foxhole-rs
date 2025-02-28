@@ -66,27 +66,13 @@ where
         };
 
         connection
-            .set_nonblocking(true)
+            .set_timeout(Some(Duration::from_secs(5)))
             .expect("Shouldn't fail unless duration is 0");
 
-        let mut timeout = Duration::from_secs(5);
-        let mut last = Instant::now();
-
         loop {
-            if timeout.is_zero() {
-                break;
-            }
-
             let (request, responder) = match connection.next_frame() {
                 Ok((request, responder)) => (request, responder),
                 Err(e) if e.kind() == ErrorKind::WouldBlock => {
-                    let now = Instant::now();
-                    let elapsed = now - last;
-
-                    timeout = timeout.saturating_sub(elapsed);
-
-                    last = now;
-
                     continue;
                 }
                 Err(_) => break,
@@ -98,7 +84,7 @@ where
                 b
             });
 
-            let mut should_close: bool = true;
+            let mut should_close: bool = false;
 
             if let Some(header) = r.headers().get("connection").and_then(|i| i.to_str().ok()) {
                 #[cfg(feature = "websocket")]
@@ -319,7 +305,7 @@ where
 
         let Some(system) = handler.get(ctx.request.method()) else {
             let _ = respond_fallback(ctx, self.router, self.response_layer, self.responder);
-            
+
             return;
         };
 

@@ -126,9 +126,11 @@ pub trait Responder: Sized + Send {
 pub struct Http1 {
     conn: BoxedStream,
     buf: Vec<u8>,
+
     read: usize,
+
     next_writer: Option<Receiver<BoxedStream>>,
-    unfinished: Option<(usize, SyncSender<Vec<u8>>)>,
+    unfinished: Option<SyncSender<Vec<u8>>>,
 }
 
 impl Http1 {
@@ -162,7 +164,7 @@ impl Connection for Http1 {
     fn new(conn: BoxedStream) -> Result<Self, std::io::Error> {
         Ok(Self {
             conn,
-            buf: vec![0; 1024],
+            buf: vec![0; 8192],
             read: 0,
             next_writer: None,
             unfinished: None,
@@ -178,29 +180,34 @@ impl Connection for Http1 {
     }
 
     fn next_frame(&mut self) -> Result<(Request<Self::Body>, Self::Responder), std::io::Error> {
-        if let Some((body_idx, sender)) = &self.unfinished {
-            if self.read != self.buf.len() {
-                loop {
-                    let n = self.conn.read(&mut self.buf[self.read..])?;
-                    self.read += n;
+        if let Some(sender) = &self.unfinished {
+            loop {
+                if self.read >= self.buf.len() {
+                    break;
                 }
+
+                let n = self.conn.read(&mut self.buf[self.read..])?;
+                self.read += n;
             }
 
-            let body = self.buf[*body_idx..].to_vec();
+            let _ = sender.send(self.buf.clone());
 
-            let _ = sender.send(body);
-
-            self.buf.resize(1024, 0);
+            self.buf.resize(8192, 0);
             self.read = 0;
             self.unfinished = None;
         }
 
         let n = self.conn.read(&mut self.buf[self.read..])?;
+
         self.read += n;
 
         let (req, body_idx) = take_request(&self.buf[..self.read]).map_err(|e| match e {
             ParseError::Unfinished => {
-                std::io::Error::new(ErrorKind::WouldBlock, "Unfinished request")
+                if n == 0 {
+                    std::io::Error::new(ErrorKind::ConnectionAborted, "Connection closed")
+                } else {
+                    std::io::Error::new(ErrorKind::WouldBlock, "Unfinished request")
+                }
             }
             _ => std::io::Error::new(ErrorKind::Other, "Failed to parse request from stream"),
         })?;
@@ -217,14 +224,25 @@ impl Connection for Http1 {
         if body_len == 0 {
             sender
                 .send(Vec::new())
-                .expect("Failed to send body to Lazy");
+                .expect("Should not fail to send before dropped sender");
 
-            self.buf.clear();
-            self.buf.resize(1024, 0);
-            self.read = 0;
+            self.buf = self.buf[body_idx..].to_vec();
+            self.unfinished = None;
+            self.read -= body_idx;
+        } else if self.read >= body_idx + body_len {
+            sender
+                .send(self.buf[body_idx..body_idx + body_len].to_vec())
+                .expect("Should not fail to send before dropped sender");
+
+            self.buf = self.buf[body_idx + body_len..].to_vec();
+            self.unfinished = None;
+            self.read -= body_idx;
         } else {
-            self.buf.resize(body_idx + body_len, 0);
-            self.unfinished = Some((body_idx, sender));
+            self.buf = self.buf[body_idx..].to_vec();
+            self.buf.resize(body_len, 0);
+
+            self.unfinished = Some(sender);
+            self.read -= body_idx;
         }
 
         Ok((req.map(|_| lazy), self.next_writer()?))
@@ -241,5 +259,94 @@ where
 {
     fn write_bytes(self, bytes: Vec<u8>) -> Result<(), std::io::Error> {
         self.send(&bytes)
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use std::io::{Cursor, ErrorKind, Read, Write};
+
+    use super::{BoxedTryClone, Connection, Http1, SetNonBlocking, SetTimeout};
+
+    // Read + Write + BoxedTryClone + SetTimeout + SetNonBlocking + Send + Sync
+    //
+    #[derive(Clone)]
+    struct FakeStream {
+        cursor: Cursor<String>,
+    }
+
+    impl Read for FakeStream {
+        fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+            self.cursor.read(buf)
+        }
+    }
+
+    impl Write for FakeStream {
+        fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+            Ok(buf.len())
+        }
+
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+
+    impl BoxedTryClone for FakeStream {
+        fn try_clone(&self) -> std::io::Result<super::BoxedStream> {
+            let s = self.clone();
+
+            Ok(Box::new(s))
+        }
+    }
+
+    impl SetTimeout for FakeStream {
+        fn set_timeout(&mut self, _timeout: Option<std::time::Duration>) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+
+    impl SetNonBlocking for FakeStream {
+        fn set_nonblocking(&mut self, _value: bool) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn joined_requests() -> Result<(), Box<dyn std::error::Error>> {
+        let data = String::from(
+            "POST / HTTP/1.0\r\nContent-Length: 1\r\n\r\n0POST / HTTP/1.0\r\nContent-Length: 0\r\n\r\nPOST / HTTP/1.0\r\nContent-Length: 0\r\n\r\n",
+        );
+
+        let cursor = Cursor::new(data);
+
+        let mut http = Http1::new(Box::new(FakeStream { cursor }))?;
+
+        let mut reqs = vec![];
+
+        let mut count = 0;
+
+        loop {
+            count += 1;
+
+            if count >= 6 {
+                // This should take at most 4 iterations as cursor will provide all bytes on first
+                // call
+                break;
+            }
+
+            if reqs.len() >= 3 {
+                break;
+            }
+
+            match http.next_frame() {
+                Ok((req, _)) => {
+                    reqs.push(req.map(|b| b.get().to_vec()));
+                }
+                Err(e) if e.kind() == ErrorKind::WouldBlock => {}
+                Err(e) => return Err(Box::new(e)),
+            }
+        }
+
+        Ok(())
     }
 }

@@ -88,65 +88,61 @@ fn split_lines(input: &[u8]) -> Vec<&[u8]> {
     results
 }
 
-/// Read a request from a source
 pub fn take_request(input: &[u8]) -> Result<(Request<()>, usize), ParseError>
 where
 {
-    let mut body_index = 0;
-
-    let mut lines = split_lines(input).into_iter();
-
-    let request_line = lines.next().ok_or(ParseError::Unfinished)?;
-
-    if request_line.is_empty() {
-        return Err(ParseError::Unfinished);
+    let mut body_idx = None;
+    for (i, line) in input.windows(4).enumerate() {
+        if line == b"\r\n\r\n" {
+            body_idx = Some(i + 4);
+            break;
+        }
     }
 
-    // Adjust for "\r\n"
-    body_index += request_line.len() + 2;
+    let Some(body_idx) = body_idx else {
+        return Err(ParseError::Unfinished);
+    };
 
-    let parts: Vec<&[u8]> = request_line.split(|&b| b == b' ').collect();
+    let Ok(req) = std::str::from_utf8(&input[..body_idx]) else {
+        return Err(ParseError::InvalidEncoding);
+    };
+
+    let mut lines = req.split("\r\n");
+
+    let req_line = lines.next().ok_or(ParseError::MalformedRequest)?;
+
+    let parts: Vec<&str> = req_line.split(" ").collect();
 
     if parts.len() < 3 {
         return Err(ParseError::MalformedRequest);
     }
 
-    let method = std::str::from_utf8(parts[0]).map_err(|_| ParseError::InvalidEncoding)?;
-    let uri = std::str::from_utf8(parts[1]).map_err(|_| ParseError::InvalidEncoding)?;
-    let version = std::str::from_utf8(parts[2]).map_err(|_| ParseError::InvalidEncoding)?;
+    let method = parts[0];
+    let uri = parts[1];
+    let version = parts[2];
 
-    let mut req = Request::builder()
+    let mut builder = Request::builder()
         .method(method)
         .uri(uri)
         .version(Version::parse_version(version)?);
 
     for line in lines {
-        if line.is_empty() || line.starts_with(&[b'\r']) {
+        if line.is_empty() {
             break;
         }
 
-        body_index += line.len() + 2;
-
-        let header_parts: Vec<&[u8]> = line.splitn(2, |&b| b == b':').collect();
+        let header_parts: Vec<&str> = line.splitn(2, ':').collect();
 
         if header_parts.len() != 2 {
             return Err(ParseError::MalformedRequest);
         }
 
-        let key = std::str::from_utf8(header_parts[0]).map_err(|_| ParseError::InvalidEncoding)?;
-        let value = std::str::from_utf8(header_parts[1])
-            .map_err(|_| ParseError::InvalidEncoding)?
-            .trim();
-
-        req = req.header(key, value);
+        builder = builder.header(header_parts[0], header_parts[1])
     }
 
-    // Adjust for final "\r\n"
-    body_index += 2;
-
     Ok((
-        req.body(()).map_err(|_| ParseError::MalformedRequest)?,
-        body_index,
+        builder.body(()).map_err(|_| ParseError::MalformedRequest)?,
+        body_idx,
     ))
 }
 
@@ -224,5 +220,33 @@ where
 {
     fn into_raw_response(self) -> RawResponse {
         self.map(IntoRawBytes::into_raw_bytes)
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::take_request;
+
+    #[test]
+    fn test_joined_request() {
+        let data = String::from(
+            "POST / HTTP/1.0\r\nContent-Length: 0\r\n\r\nPOST / HTTP/1.0\r\nContent-Length: 0\r\n\r\nPOST / HTTP/1.0\r\nContent-Length: 0\r\n\r\n",
+        );
+
+        let first = take_request(data.as_bytes()).unwrap();
+        assert_eq!(first.1, 38);
+
+        let second = take_request(&data.as_bytes()[first.1..]).unwrap();
+        assert_eq!(second.1, 38);
+
+        let third = take_request(&data.as_bytes()[first.1 + second.1..]).unwrap();
+        assert_eq!(third.1, 38);
+    }
+
+    #[test]
+    fn test_request() {
+        let data = String::from("POST / HTTP/1.0\r\nContent-Length: 1\r\n\r\n0");
+
+        assert_eq!(take_request(data.as_bytes()).is_ok(), true);
     }
 }

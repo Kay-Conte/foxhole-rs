@@ -24,6 +24,7 @@
 ### BugFixes
 
 - Removed expect where an error is sometimes acceptable in "tasks". This should not have been the case regardless, instead favoring error handling.
+- Fixed incorrect handling of joined requests on one connection in `Http1`
 
 # [0.4.0]
 
