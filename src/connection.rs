@@ -202,8 +202,6 @@ impl Connection for Http1 {
 
         let (req, body_idx) = take_request(&self.buf[..self.read]).map_err(|e| match e {
             ParseError::Unfinished => {
-                println!("{:?}", std::str::from_utf8(&self.buf).unwrap());
-
                 std::io::Error::new(ErrorKind::WouldBlock, "Unfinished request")
             }
             _ => std::io::Error::new(ErrorKind::Other, "Failed to parse request from stream"),
@@ -219,7 +217,6 @@ impl Connection for Http1 {
         let (lazy, sender) = Lazy::new();
 
         if body_len == 0 {
-            println!("0");
             sender
                 .send(Vec::new())
                 .expect("Should not fail to send before dropped sender");
@@ -236,7 +233,6 @@ impl Connection for Http1 {
             self.unfinished = None;
             self.read -= body_idx - 1;
         } else {
-            println!("2");
             self.buf = self.buf[body_idx..].to_vec();
             self.buf.resize(body_len, 0);
 
@@ -299,13 +295,13 @@ mod test {
     }
 
     impl SetTimeout for FakeStream {
-        fn set_timeout(&mut self, timeout: Option<std::time::Duration>) -> std::io::Result<()> {
+        fn set_timeout(&mut self, _timeout: Option<std::time::Duration>) -> std::io::Result<()> {
             Ok(())
         }
     }
 
     impl SetNonBlocking for FakeStream {
-        fn set_nonblocking(&mut self, value: bool) -> std::io::Result<()> {
+        fn set_nonblocking(&mut self, _value: bool) -> std::io::Result<()> {
             Ok(())
         }
     }
@@ -322,7 +318,17 @@ mod test {
 
         let mut reqs = vec![];
 
+        let mut count = 0;
+
         loop {
+            count += 1;
+
+            if count >= 4 {
+                // This should take at most 4 iterations as cursor will provide all bytes on first
+                // call
+                break;
+            }
+
             if reqs.len() >= 2 {
                 break;
             }
@@ -335,8 +341,6 @@ mod test {
                 Err(e) => return Err(Box::new(e)),
             }
         }
-
-        println!("{:?}", reqs);
 
         Ok(())
     }
