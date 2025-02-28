@@ -33,6 +33,16 @@
 - Https support in the works. Available on the under feature "tls". largely Untested!
 - Http2 support coming.
 
+# Specification Checklist
+- [x] Persistent Connections
+- [x] Header Parsing & Normalization
+- [x] Content-Length support
+- [x] Default Response Headers (Date, Server, Content-Type for default response types)
+- [ ] Websockets  (wip)
+- [ ] Enforce Host Header Requirement
+- [ ] Expect: 100-continue
+- [ ] Correctly refuse mismatch versions
+
 # Getting Started
 Foxhole uses a set of magic handler systems and traits to simplify handling requests and responses.   
 Here's a starting example of a Hello World server.
