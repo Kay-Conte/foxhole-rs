@@ -198,11 +198,16 @@ impl Connection for Http1 {
         }
 
         let n = self.conn.read(&mut self.buf[self.read..])?;
+
         self.read += n;
 
         let (req, body_idx) = take_request(&self.buf[..self.read]).map_err(|e| match e {
             ParseError::Unfinished => {
-                std::io::Error::new(ErrorKind::WouldBlock, "Unfinished request")
+                if n == 0 {
+                    std::io::Error::new(ErrorKind::ConnectionAborted, "Connection closed")
+                } else {
+                    std::io::Error::new(ErrorKind::WouldBlock, "Unfinished request")
+                }
             }
             _ => std::io::Error::new(ErrorKind::Other, "Failed to parse request from stream"),
         })?;
@@ -223,7 +228,7 @@ impl Connection for Http1 {
 
             self.buf = self.buf[body_idx..].to_vec();
             self.unfinished = None;
-            self.read -= body_idx - 1;
+            self.read -= body_idx;
         } else if self.read >= body_idx + body_len {
             sender
                 .send(self.buf[body_idx..body_idx + body_len].to_vec())
@@ -231,13 +236,13 @@ impl Connection for Http1 {
 
             self.buf = self.buf[body_idx + body_len..].to_vec();
             self.unfinished = None;
-            self.read -= body_idx - 1;
+            self.read -= body_idx;
         } else {
             self.buf = self.buf[body_idx..].to_vec();
             self.buf.resize(body_len, 0);
 
             self.unfinished = Some(sender);
-            self.read -= body_idx - 1;
+            self.read -= body_idx;
         }
 
         Ok((req.map(|_| lazy), self.next_writer()?))
@@ -309,7 +314,7 @@ mod test {
     #[test]
     fn joined_requests() -> Result<(), Box<dyn std::error::Error>> {
         let data = String::from(
-            "POST / HTTP/1.0\r\nContent-Length: 1\r\n\r\n0POST / HTTP/1.0\r\nContent-Length: 0\r\n\r\n",
+            "POST / HTTP/1.0\r\nContent-Length: 1\r\n\r\n0POST / HTTP/1.0\r\nContent-Length: 0\r\n\r\nPOST / HTTP/1.0\r\nContent-Length: 0\r\n\r\n",
         );
 
         let cursor = Cursor::new(data);
@@ -323,13 +328,13 @@ mod test {
         loop {
             count += 1;
 
-            if count >= 4 {
+            if count >= 6 {
                 // This should take at most 4 iterations as cursor will provide all bytes on first
                 // call
                 break;
             }
 
-            if reqs.len() >= 2 {
+            if reqs.len() >= 3 {
                 break;
             }
 
