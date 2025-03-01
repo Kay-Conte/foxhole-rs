@@ -39,7 +39,7 @@ impl App {
     /// Constructs a new application
     pub fn builder(scope: Router) -> Self {
         Self {
-            router: scope.into(),
+            router: scope,
             request_layer: Box::new(()),
             response_layer: Box::new(DefaultResponseGroup::new()),
             type_cache: TypeCache::new(),

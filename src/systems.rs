@@ -13,6 +13,7 @@ pub trait System<'a, T> {
 
 #[doc(hidden)]
 pub struct DynSystem {
+    #[allow(clippy::type_complexity)]
     inner: Box<dyn Fn(&RequestState, VecDeque<String>) -> Action + 'static + Send + Sync>,
 }
 

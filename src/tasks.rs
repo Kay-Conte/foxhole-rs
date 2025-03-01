@@ -297,7 +297,7 @@ where
             query,
         };
 
-        let Some((handler, captures)) = self.router.route(&path) else {
+        let Some((handler, captures)) = self.router.route(path) else {
             let _ = respond_fallback(ctx, self.router, self.response_layer, self.responder);
 
             return;
@@ -316,8 +316,6 @@ where
                 self.response_layer.execute(&mut r);
 
                 let _ = self.responder.respond(r);
-
-                return;
             }
             #[cfg(feature = "websocket")]
             Action::Upgrade(r, f) => {
@@ -330,13 +328,9 @@ where
                 let _ = self.responder.respond(response);
 
                 f(connection.upgrade());
-
-                return;
             }
             Action::None => {
                 let _ = respond_fallback(ctx, self.router, self.response_layer, self.responder);
-
-                return;
             }
         }
     }
@@ -353,7 +347,7 @@ impl<'a> Registration<'a> {
     }
 }
 
-impl<'a> Drop for Registration<'a> {
+impl Drop for Registration<'_> {
     fn drop(&mut self) {
         self.nb.fetch_sub(1, Ordering::Release);
     }

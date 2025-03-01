@@ -65,29 +65,6 @@ impl VersionExt for Version {
     }
 }
 
-fn split_lines(input: &[u8]) -> Vec<&[u8]> {
-    let mut results = Vec::new();
-    let mut last = 0;
-
-    if input.len() < 2 {
-        return vec![input];
-    }
-
-    for i in 0..input.len() - 1 {
-        if input[i] == b'\r' && input[i + 1] == b'\n' {
-            results.push(&input[last..i]);
-
-            last = i + 2;
-        }
-    }
-
-    if last < input.len() {
-        results.push(&input[last..]);
-    }
-
-    results
-}
-
 pub fn take_request(input: &[u8]) -> Result<(Request<()>, usize), ParseError>
 where
 {
@@ -247,6 +224,6 @@ mod test {
     fn test_request() {
         let data = String::from("POST / HTTP/1.0\r\nContent-Length: 1\r\n\r\n0");
 
-        assert_eq!(take_request(data.as_bytes()).is_ok(), true);
+        assert!(take_request(data.as_bytes()).is_ok());
     }
 }

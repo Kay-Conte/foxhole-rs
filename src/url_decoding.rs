@@ -14,7 +14,7 @@ fn decode_query(encoded: &str) -> Option<String> {
                 decoded.push(hex as char)
             }
 
-            b'+' => decoded.push(' ' as char),
+            b'+' => decoded.push(' '),
 
             byte => decoded.push(byte as char),
         }
@@ -26,9 +26,7 @@ fn decode_query(encoded: &str) -> Option<String> {
 pub fn map(encoded: &str) -> Option<HashMap<String, String>> {
     let mut map = HashMap::new();
 
-    let Some(query) = decode_query(encoded) else {
-        return None;
-    };
+    let query = decode_query(encoded)?;
 
     let pairs = query.split("&");
 

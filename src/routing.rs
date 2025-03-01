@@ -115,7 +115,7 @@ impl Router {
             for (pattern, node) in cursor.children.iter() {
                 match pattern {
                     Pattern::Exact(s) if s == segment => {
-                        cursor = &node;
+                        cursor = node;
 
                         matched = true;
                         break;

@@ -5,6 +5,7 @@ use crate::{Request, Response};
 pub type BoxLayer<T> = Box<dyn 'static + Layer<T> + Send + Sync>;
 
 /// A collection of `Layers` to be executed in sequence.
+#[derive(Default)]
 pub struct LayerGroup<I> {
     layers: Vec<BoxLayer<I>>,
 }
@@ -47,6 +48,7 @@ impl Layer<Response> for () {
 pub struct DefaultResponseGroup;
 
 impl DefaultResponseGroup {
+    #[allow(clippy::new_ret_no_self)]
     pub fn new() -> LayerGroup<Response> {
         let group = LayerGroup::new().add_layer(SetContentLength);
 

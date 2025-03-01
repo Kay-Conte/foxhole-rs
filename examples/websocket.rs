@@ -10,6 +10,8 @@ use foxhole::{
 fn upgrade(upgrade: Upgrade) -> Websocket {
     use std::io::ErrorKind;
 
+    println!("Running");
+
     upgrade.handle(|mut ws| loop {
         match ws.next_frame() {
             Ok(v) => {

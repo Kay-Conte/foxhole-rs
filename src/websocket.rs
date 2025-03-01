@@ -8,7 +8,7 @@ use crate::{
     ResolveGuard, Response,
 };
 
-const GUID: &'static str = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
+const GUID: &str = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 
 pub(crate) fn encode_key(key: &str) -> String {
     let concatenated = format!("{}{}", key, GUID);
@@ -17,7 +17,7 @@ pub(crate) fn encode_key(key: &str) -> String {
     hasher.update(concatenated);
     let result = hasher.finalize();
 
-    STANDARD.encode(&result)
+    STANDARD.encode(result)
 }
 
 fn respond_handshake(req: &Request) -> Response {
@@ -147,7 +147,7 @@ impl WebsocketConnection {
 
             self.inner.read_exact(&mut extended_payload)?;
 
-            payload_len = u64::from_be_bytes(extended_payload) as u64;
+            payload_len = u64::from_be_bytes(extended_payload);
         }
 
         let masking_key = if masked {

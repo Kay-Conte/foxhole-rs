@@ -1,3 +1,4 @@
+#![allow(clippy::new_without_default)]
 #![doc = include_str!("../README.md")]
 
 mod handler;
@@ -10,8 +11,8 @@ mod url_decoding;
 mod tls_connection;
 
 pub mod action;
-pub mod connection;
 pub mod builtin;
+pub mod connection;
 pub mod framework;
 pub mod get_as_slice;
 pub mod http_utils;

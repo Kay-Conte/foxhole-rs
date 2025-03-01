@@ -48,7 +48,7 @@ pub struct Query<'a, K>(pub &'a K::Value)
 where
     K: TypeCacheKey;
 
-impl<'a, K> Resolve for Query<'a, K>
+impl<K> Resolve for Query<'_, K>
 where
     K: TypeCacheKey,
 {
@@ -65,7 +65,7 @@ where
 /// Returns a reference to the path of the request.
 pub struct Url<'a>(pub &'a str);
 
-impl<'a> Resolve for Url<'a> {
+impl Resolve for Url<'_> {
     type Output<'b> = Url<'b>;
 
     fn resolve<'c>(
@@ -111,7 +111,7 @@ impl Resolve for UrlCollect {
 /// A case insensitive `HashMap` of headers
 pub struct HeaderMap<'a>(pub &'a http::HeaderMap);
 
-impl<'a> Resolve for HeaderMap<'a> {
+impl Resolve for HeaderMap<'_> {
     type Output<'b> = HeaderMap<'b>;
 
     fn resolve<'c>(
@@ -125,7 +125,7 @@ impl<'a> Resolve for HeaderMap<'a> {
 /// A map of all url query parameters. Ex: "?foo=bar"
 pub struct ArgMap<'a>(pub &'a HashMap<String, String>);
 
-impl<'a> Resolve for ArgMap<'a> {
+impl Resolve for ArgMap<'_> {
     type Output<'b> = ArgMap<'b>;
 
     fn resolve<'c>(
@@ -136,7 +136,7 @@ impl<'a> Resolve for ArgMap<'a> {
     }
 }
 
-impl<'a, T> Resolve for Option<T>
+impl<T> Resolve for Option<T>
 where
     T: Resolve,
 {
@@ -153,7 +153,7 @@ where
     }
 }
 
-impl<'a> Resolve for &'a [u8] {
+impl Resolve for &[u8] {
     type Output<'b> = &'b [u8];
 
     fn resolve<'c>(
@@ -164,7 +164,7 @@ impl<'a> Resolve for &'a [u8] {
     }
 }
 
-impl<'a> Resolve for &'a str {
+impl Resolve for &str {
     type Output<'b> = &'b str;
 
     fn resolve<'c>(
