@@ -108,7 +108,7 @@ where
             break;
         }
 
-        let header_parts: Vec<&str> = line.splitn(2, ':').collect();
+        let header_parts: Vec<&str> = line.splitn(2, ": ").collect();
 
         if header_parts.len() != 2 {
             return Err(ParseError::MalformedRequest);
