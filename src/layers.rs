@@ -50,7 +50,9 @@ pub struct DefaultResponseGroup;
 impl DefaultResponseGroup {
     #[allow(clippy::new_ret_no_self)]
     pub fn new() -> LayerGroup<Response> {
-        let group = LayerGroup::new().add_layer(SetContentLength);
+        let group = LayerGroup::new()
+            .add_layer(SetContentLength)
+            .add_layer(SetServer);
 
         #[cfg(feature = "date")]
         let group = group.add_layer(SetDate);
@@ -74,6 +76,18 @@ impl Layer<Response> for SetContentLength {
             .expect("Failed to parse length as HeaderValue");
 
         data.headers_mut().insert("content-length", value);
+    }
+}
+
+pub struct SetServer;
+
+impl Layer<Response> for SetServer {
+    fn execute(&self, data: &mut Response) {
+        data.headers_mut().insert(
+            "server",
+            HeaderValue::from_str("foxhole")
+                .expect("Failed to convert server name to header value"),
+        );
     }
 }
 

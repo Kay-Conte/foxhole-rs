@@ -11,6 +11,7 @@
   - `Url`
   - `HeaderMap`
   - `ArgMap`
+- new `SetServer` layer is also part of `DefaultResponseLayer`
 
 ### Changed
 
