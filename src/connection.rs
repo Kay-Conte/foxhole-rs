@@ -236,7 +236,7 @@ impl Connection for Http1 {
 
             self.buf = self.buf[body_idx + body_len..].to_vec();
             self.unfinished = None;
-            self.read -= body_idx;
+            self.read -= body_idx + body_len;
         } else {
             self.buf = self.buf[body_idx..].to_vec();
             self.buf.resize(body_len, 0);
