@@ -3,7 +3,7 @@ use foxhole::{
     error::Error,
     App, Http1, IntoResponse,
     Method::Get,
-    Resolve, ResolveGuard, Router,
+    Resolve, Router,
 };
 
 #[derive(Debug)]
@@ -33,8 +33,11 @@ impl Resolve for Fallible {
     fn resolve<'a>(
         _ctx: &'a foxhole::RequestState,
         _captures: &mut foxhole::Captures,
-    ) -> foxhole::ResolveGuard<Self::Output<'a>> {
-        ResolveGuard::err(CustomErr::Bar)
+    ) -> std::result::Result<
+        Fallible,
+        std::boxed::Box<(dyn foxhole::error::IntoResponseError + 'static)>,
+    > {
+        Err(Box::new(CustomErr::Bar))
     }
 }
 

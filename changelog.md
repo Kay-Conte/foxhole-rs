@@ -17,11 +17,13 @@
 
 - `Resolve` no longer takes a lifetime in favor of generic associated lifetime
 - Fallbacks have been replaced with error handlers. See the new `err_handler.rs` example.
+- `Resolve` types can no longer respond directly. Instead they can return an error that can be caught by the user.
 
 ### Removed
 
 - All method guards, use `foxhole::Method` now in combination with the new `Router
 - `Scope` in favor of `Router`
+- `ResolveGuard` in favor of `Result`
 
 ### BugFixes
 

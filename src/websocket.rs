@@ -4,8 +4,10 @@ use base64::{engine::general_purpose::STANDARD, Engine};
 use sha1::{Digest, Sha1};
 
 use crate::{
-    action::IntoAction, connection::BoxedStream, error::Error, Action, IntoResponse, Request,
-    Resolve, ResolveGuard, Response,
+    action::IntoAction,
+    connection::BoxedStream,
+    error::{Error, IntoResponseError},
+    Action, IntoResponse, Request, Resolve, Response,
 };
 
 const GUID: &str = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
@@ -72,20 +74,20 @@ impl Resolve for Upgrade {
     fn resolve(
         ctx: &crate::RequestState,
         _captures: &mut VecDeque<String>,
-    ) -> crate::ResolveGuard<Self> {
+    ) -> Result<Self, Box<dyn IntoResponseError>> {
         let Some(header) = ctx
             .request
             .headers()
             .get("connection")
             .and_then(|i| i.to_str().ok())
         else {
-            return ResolveGuard::err(Error::InternalServer);
+            return Err(Box::new(Error::InternalServer));
         };
 
         if header.to_lowercase() == "upgrade" {
-            ResolveGuard::Value(Upgrade)
+            Ok(Upgrade)
         } else {
-            ResolveGuard::err(Error::InternalServer)
+            Err(Box::new(Error::InternalServer))
         }
     }
 }

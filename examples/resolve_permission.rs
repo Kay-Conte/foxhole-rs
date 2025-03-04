@@ -1,8 +1,6 @@
 use std::{collections::HashMap, marker::PhantomData, sync::Arc};
 
-use foxhole::{
-    App, Http1, IntoResponse, Method::Post, Resolve, ResolveGuard, Router, TypeCache, TypeCacheKey,
-};
+use foxhole::{error::Error, App, Http1, Method::Post, Resolve, Router, TypeCache, TypeCacheKey};
 
 struct User {
     permission: u8,
@@ -42,22 +40,25 @@ where
     fn resolve<'a>(
         ctx: &'a foxhole::RequestState,
         _captures: &mut foxhole::Captures,
-    ) -> ResolveGuard<Self::Output<'a>> {
+    ) -> std::result::Result<
+        HasPermission<T>,
+        std::boxed::Box<(dyn foxhole::error::IntoResponseError + 'static)>,
+    > {
         let user_base = ctx.global_cache.get::<UserBase>().unwrap();
 
         let Some(user_name) = ctx.request.headers().get("user") else {
-            return ResolveGuard::Respond(401u16.response());
+            return Err(Box::new(Error::NotAuthorized));
         };
 
         let Some(user) = user_base.map.get(user_name.to_str().unwrap()) else {
-            return ResolveGuard::Respond(401u16.response());
+            return Err(Box::new(Error::NotAuthorized));
         };
 
         if !T::has_permission(user.permission) {
-            return ResolveGuard::Respond(401u16.response());
+            return Err(Box::new(Error::NotAuthorized));
         }
 
-        ResolveGuard::Value(HasPermission(PhantomData))
+        Ok(HasPermission(PhantomData))
     }
 }
 

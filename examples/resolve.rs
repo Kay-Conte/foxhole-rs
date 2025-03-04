@@ -1,4 +1,4 @@
-use foxhole::{action::Html, App, Http1, Method::Get, Resolve, ResolveGuard, Router};
+use foxhole::{action::Html, App, Http1, Method::Get, Resolve, Router};
 
 struct Token(String);
 
@@ -8,13 +8,16 @@ impl Resolve for Token {
     fn resolve(
         ctx: &foxhole::RequestState,
         _captures: &mut foxhole::Captures,
-    ) -> ResolveGuard<Self> {
+    ) -> std::result::Result<
+        Token,
+        std::boxed::Box<(dyn foxhole::error::IntoResponseError + 'static)>,
+    > {
         let Some(v) = ctx.request.headers().get("authorization") else {
-            return ResolveGuard::err(foxhole::error::Error::NotAuthorized);
+            return Err(Box::new(foxhole::error::Error::NotAuthorized));
         };
 
         // You should handle the `Err` case in real code
-        ResolveGuard::Value(Token(v.to_str().unwrap().to_string()))
+        Ok(Token(v.to_str().unwrap().to_string()))
     }
 }
 

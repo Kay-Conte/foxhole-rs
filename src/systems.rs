@@ -1,6 +1,6 @@
 use crate::{
     action::{Action, IntoAction},
-    resolve::{Resolve, ResolveGuard},
+    resolve::Resolve,
     tasks::RequestState,
 };
 
@@ -58,9 +58,9 @@ macro_rules! system {
                 $(
                 #[allow(non_snake_case)]
                 let $x = match $x::resolve(&ctx, &mut captures) {
-                    ResolveGuard::Value(v) => v,
-                    ResolveGuard::Err(e) => return Action::Err(e),
-                    ResolveGuard::Respond(r) => return Action::Respond(r), };)*
+                    Ok(v) => v,
+                    Err(e) => return Action::Err(e),
+                };)*
 
                 let r = self($($x,)*);
 
