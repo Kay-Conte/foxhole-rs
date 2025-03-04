@@ -1,6 +1,12 @@
 use std::collections::{HashMap, VecDeque};
 
-use crate::{action::RawResponse, routing::Captures, type_cache::TypeCacheKey, RequestState};
+use crate::{
+    action::RawResponse,
+    error::{Error, IntoResponseError},
+    routing::Captures,
+    type_cache::TypeCacheKey,
+    RequestState,
+};
 
 /// `Resolve` is a trait used to construct values needed to call a given `System`. All parameters
 /// of a `System` must implement `Resolve` to be valid.
@@ -21,7 +27,7 @@ pub enum ResolveGuard<T> {
     /// Don't run this system or any others, respond early with this response
     Respond(RawResponse),
     /// Don't run this system, but continue routing to other systems
-    None,
+    Err(Box<dyn IntoResponseError>),
 }
 
 impl<T> ResolveGuard<T> {
@@ -29,17 +35,15 @@ impl<T> ResolveGuard<T> {
         match self {
             ResolveGuard::Value(v) => ResolveGuard::Value(f(v)),
             ResolveGuard::Respond(v) => ResolveGuard::Respond(v),
-            ResolveGuard::None => ResolveGuard::None,
+            ResolveGuard::Err(e) => ResolveGuard::Err(e),
         }
     }
-}
 
-impl<T> From<Option<T>> for ResolveGuard<T> {
-    fn from(value: Option<T>) -> Self {
-        match value {
-            Some(v) => ResolveGuard::Value(v),
-            None => ResolveGuard::None,
-        }
+    pub fn err<E>(err: E) -> ResolveGuard<T>
+    where
+        E: IntoResponseError,
+    {
+        ResolveGuard::Err(Box::new(err))
     }
 }
 
@@ -58,7 +62,10 @@ where
         ctx: &'c RequestState,
         _captures: &mut Captures,
     ) -> ResolveGuard<Self::Output<'c>> {
-        ctx.global_cache.get::<K>().map(|v| Query(v)).into()
+        match ctx.global_cache.get::<K>().map(|v| Query(v)) {
+            Some(v) => ResolveGuard::Value(v),
+            None => ResolveGuard::err(Error::QueryNotInCache),
+        }
     }
 }
 
@@ -85,7 +92,7 @@ impl Resolve for UrlPart {
 
     fn resolve(_ctx: &RequestState, captures: &mut Captures) -> ResolveGuard<Self> {
         let Some(part) = captures.pop_front() else {
-            return ResolveGuard::None;
+            return ResolveGuard::err(Error::MissingUrlPart);
         };
 
         ResolveGuard::Value(UrlPart(part))
@@ -171,8 +178,9 @@ impl Resolve for &str {
         ctx: &'c RequestState,
         _captures: &mut Captures,
     ) -> ResolveGuard<Self::Output<'c>> {
-        std::str::from_utf8(ctx.request.body().get_as_slice())
-            .ok()
-            .into()
+        match std::str::from_utf8(ctx.request.body().get_as_slice()) {
+            Ok(v) => ResolveGuard::Value(v),
+            Err(_) => ResolveGuard::err(Error::MalformedRequest),
+        }
     }
 }

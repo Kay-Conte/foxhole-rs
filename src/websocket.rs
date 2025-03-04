@@ -4,8 +4,8 @@ use base64::{engine::general_purpose::STANDARD, Engine};
 use sha1::{Digest, Sha1};
 
 use crate::{
-    action::IntoAction, connection::BoxedStream, Action, IntoResponse, Request, Resolve,
-    ResolveGuard, Response,
+    action::IntoAction, connection::BoxedStream, error::Error, Action, IntoResponse, Request,
+    Resolve, ResolveGuard, Response,
 };
 
 const GUID: &str = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
@@ -79,13 +79,13 @@ impl Resolve for Upgrade {
             .get("connection")
             .and_then(|i| i.to_str().ok())
         else {
-            return ResolveGuard::None;
+            return ResolveGuard::err(Error::InternalServer);
         };
 
         if header.to_lowercase() == "upgrade" {
             ResolveGuard::Value(Upgrade)
         } else {
-            ResolveGuard::None
+            ResolveGuard::err(Error::InternalServer)
         }
     }
 }

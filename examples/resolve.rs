@@ -10,7 +10,7 @@ impl Resolve for Token {
         _captures: &mut foxhole::Captures,
     ) -> ResolveGuard<Self> {
         let Some(v) = ctx.request.headers().get("authorization") else {
-            return ResolveGuard::None;
+            return ResolveGuard::err(foxhole::error::Error::NotAuthorized);
         };
 
         // You should handle the `Err` case in real code

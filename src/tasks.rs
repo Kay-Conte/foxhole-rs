@@ -1,4 +1,5 @@
 use std::{
+    any::Any,
     collections::{HashMap, VecDeque},
     io::ErrorKind,
     marker::PhantomData,
@@ -14,6 +15,7 @@ use http::Request;
 
 use crate::{
     connection::{Connection, Responder},
+    error::Error,
     get_as_slice::GetAsSlice,
     layers::BoxLayer,
     type_cache::TypeCache,
@@ -250,29 +252,6 @@ pub(crate) struct RequestTask<R, C> {
     pub response_layer: Arc<BoxLayer<Response>>,
 }
 
-fn respond_fallback<R>(
-    ctx: RequestState,
-    router: Arc<Router>,
-    response_layer: Arc<BoxLayer<Response>>,
-    responder: R,
-) -> std::io::Result<()>
-where
-    R: Responder,
-{
-    let action = router.get_fallback().call(&ctx, VecDeque::new());
-
-    let mut res = match action {
-        Action::Respond(r) => r,
-        _ => 500u16.response(),
-    };
-
-    response_layer.execute(&mut res);
-
-    let _ = responder.respond(res);
-
-    Ok(())
-}
-
 impl<R, C> Task for RequestTask<R, C>
 where
     R: Responder,
@@ -298,13 +277,29 @@ where
         };
 
         let Some((handler, captures)) = self.router.route(path) else {
-            let _ = respond_fallback(ctx, self.router, self.response_layer, self.responder);
+            let e = Error::NotFound;
+
+            let Some(handler) = self.router.get_handler(&e.type_id()) else {
+                unimplemented!()
+            };
+
+            let res = handler.handle(Box::new(e));
+
+            let _ = self.responder.respond(res);
 
             return;
         };
 
         let Some(system) = handler.get(ctx.request.method()) else {
-            let _ = respond_fallback(ctx, self.router, self.response_layer, self.responder);
+            let e = Error::NotFound;
+
+            let Some(handler) = self.router.get_handler(&e.type_id()) else {
+                unimplemented!()
+            };
+
+            let res = handler.handle(Box::new(e));
+
+            let _ = self.responder.respond(res);
 
             return;
         };
@@ -329,8 +324,13 @@ where
 
                 f(connection.upgrade());
             }
-            Action::None => {
-                let _ = respond_fallback(ctx, self.router, self.response_layer, self.responder);
+            Action::Err(e) => {
+                let response = match self.router.get_handler(&std::any::Any::type_id(e.as_ref())) {
+                    Some(handler) => handler.handle(e.into_any()),
+                    None => e.box_response(),
+                };
+
+                let _ = self.responder.respond(response);
             }
         }
     }

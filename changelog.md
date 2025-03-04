@@ -16,6 +16,7 @@
 ### Changed
 
 - `Resolve` no longer takes a lifetime in favor of generic associated lifetime
+- Fallbacks have been replaced with error handlers. See the new `err_handler.rs` example.
 
 ### Removed
 

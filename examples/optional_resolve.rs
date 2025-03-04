@@ -9,7 +9,7 @@ impl Resolve for Fallible {
         _ctx: &foxhole::RequestState,
         _captures: &mut foxhole::Captures,
     ) -> ResolveGuard<Self> {
-        ResolveGuard::None
+        ResolveGuard::err(foxhole::error::Error::NotFound)
     }
 }
 

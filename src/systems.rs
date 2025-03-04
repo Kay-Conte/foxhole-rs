@@ -59,7 +59,7 @@ macro_rules! system {
                 #[allow(non_snake_case)]
                 let $x = match $x::resolve(&ctx, &mut captures) {
                     ResolveGuard::Value(v) => v,
-                    ResolveGuard::None => return Action::None,
+                    ResolveGuard::Err(e) => return Action::Err(e),
                     ResolveGuard::Respond(r) => return Action::Respond(r), };)*
 
                 let r = self($($x,)*);

@@ -1,9 +1,13 @@
-use std::{borrow::BorrowMut, collections::VecDeque};
+use std::{
+    any::TypeId,
+    borrow::BorrowMut,
+    collections::{HashMap, VecDeque},
+};
 
 use crate::{
-    builtin::default_fallback,
+    error::{HandleError, IntoResponseError},
     handler::{Handler, InsertHandler},
-    systems::{DynSystem, IntoDynSystem},
+    IntoResponse,
 };
 
 pub type Captures = VecDeque<String>;
@@ -51,14 +55,14 @@ impl Pattern {
 
 pub struct Router {
     root: Node,
-    fallback: DynSystem,
+    err_handlers: HashMap<TypeId, Box<dyn 'static + HandleError + Send + Sync>>,
 }
 
 impl Router {
     pub fn new() -> Self {
         Self {
             root: Node::new(),
-            fallback: default_fallback.into_dyn_system(),
+            err_handlers: HashMap::new(),
         }
     }
 
@@ -87,16 +91,15 @@ impl Router {
         self
     }
 
-    pub fn fallback<T, A>(mut self, system: T) -> Self
+    pub fn handler<T, A>(mut self, system: fn(T) -> A) -> Self
     where
-        T: IntoDynSystem<A>,
+        T: IntoResponseError,
+        A: 'static + IntoResponse,
     {
-        self.fallback = system.into_dyn_system();
-        self
-    }
+        self.err_handlers
+            .insert(TypeId::of::<T>(), Box::new(system));
 
-    pub(crate) fn get_fallback(&self) -> &DynSystem {
-        &self.fallback
+        self
     }
 
     pub(crate) fn route(&self, path: &str) -> Option<(&Handler, Captures)> {
@@ -149,5 +152,9 @@ impl Router {
             .handler
             .as_ref()
             .map(|i| (i, VecDeque::from(captured)))
+    }
+
+    pub fn get_handler(&self, type_id: &TypeId) -> Option<&(dyn HandleError + Send + Sync)> {
+        self.err_handlers.get(type_id).map(|i| i.as_ref())
     }
 }

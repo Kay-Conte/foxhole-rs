@@ -1,6 +1,9 @@
 use http::{Response, Version};
 
-use crate::http_utils::IntoRawBytes;
+use crate::{
+    error::{Error, IntoResponseError},
+    http_utils::IntoRawBytes,
+};
 
 #[cfg(feature = "websocket")]
 use crate::{connection::BoxedStream, Request};
@@ -22,8 +25,16 @@ pub enum Action {
     /// websocket version or protocol negotiation, you probably want to use `foxhole::websocket::Upgrade` instead.
     Upgrade(fn(&Request) -> crate::Response, Box<dyn Fn(BoxedStream)>),
 
-    /// Do nothing and procede to fallback.
-    None,
+    Err(Box<dyn IntoResponseError>),
+}
+
+impl Action {
+    fn err<E>(e: E) -> Action
+    where
+        E: IntoResponseError,
+    {
+        Action::Err(Box::new(e))
+    }
 }
 
 /// All `System`s must return a type implementing `Action`. This trait decides the
@@ -44,18 +55,18 @@ where
     }
 }
 
-impl<T> IntoAction for Response<T>
+impl<T> IntoResponse for Response<T>
 where
     T: IntoRawBytes,
 {
-    fn action(self) -> Action {
-        Action::Respond(self.map(IntoRawBytes::into_raw_bytes))
+    fn response(self) -> RawResponse {
+        self.map(IntoRawBytes::into_raw_bytes)
     }
 }
 
 impl IntoAction for () {
     fn action(self) -> Action {
-        Action::None
+        Action::err(Error::NotFound)
     }
 }
 
@@ -66,7 +77,7 @@ where
     fn action(self) -> Action {
         match self {
             Some(v) => v.action(),
-            None => Action::None,
+            None => Action::err(Error::InternalServer),
         }
     }
 }
