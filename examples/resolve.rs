@@ -1,4 +1,4 @@
-use foxhole::{action::Html, App, Http1, Method::Get, Resolve, Router};
+use foxhole::{action::Html, App, FoxholeResult, Http1, Method::Get, Resolve, Router};
 
 struct Token(String);
 
@@ -8,10 +8,7 @@ impl Resolve for Token {
     fn resolve(
         ctx: &foxhole::RequestState,
         _captures: &mut foxhole::Captures,
-    ) -> std::result::Result<
-        Token,
-        std::boxed::Box<(dyn foxhole::error::IntoResponseError + 'static)>,
-    > {
+    ) -> FoxholeResult<Token> {
         let Some(v) = ctx.request.headers().get("authorization") else {
             return Err(Box::new(foxhole::error::Error::NotAuthorized));
         };

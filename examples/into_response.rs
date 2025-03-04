@@ -1,10 +1,10 @@
-use foxhole::{App, Http1, IntoResponse, Method::Get, Router};
+use foxhole::{action::RawResponse, App, Http1, IntoResponse, Method::Get, Router};
 
 // This is a reimplementation of the provided `Html` type.
 struct Html(String);
 
 impl IntoResponse for Html {
-    fn response(self) -> http::Response<Vec<u8>> {
+    fn response(self) -> RawResponse {
         let bytes = self.0.into_bytes();
 
         http::Response::builder()

@@ -1,6 +1,8 @@
 use std::{collections::HashMap, marker::PhantomData, sync::Arc};
 
-use foxhole::{error::Error, App, Http1, Method::Post, Resolve, Router, TypeCache, TypeCacheKey};
+use foxhole::{
+    error::Error, App, FoxholeResult, Http1, Method::Post, Resolve, Router, TypeCache, TypeCacheKey,
+};
 
 struct User {
     permission: u8,
@@ -37,13 +39,10 @@ where
 {
     type Output<'a> = Self;
 
-    fn resolve<'a>(
-        ctx: &'a foxhole::RequestState,
+    fn resolve(
+        ctx: &foxhole::RequestState,
         _captures: &mut foxhole::Captures,
-    ) -> std::result::Result<
-        HasPermission<T>,
-        std::boxed::Box<(dyn foxhole::error::IntoResponseError + 'static)>,
-    > {
+    ) -> FoxholeResult<HasPermission<T>> {
         let user_base = ctx.global_cache.get::<UserBase>().unwrap();
 
         let Some(user_name) = ctx.request.headers().get("user") else {

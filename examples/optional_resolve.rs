@@ -1,4 +1,4 @@
-use foxhole::{action::Html, App, Http1, Method::Get, Resolve, Router};
+use foxhole::{action::Html, App, FoxholeResult, Http1, Method::Get, Resolve, Router};
 
 struct Fallible;
 
@@ -8,10 +8,7 @@ impl Resolve for Fallible {
     fn resolve(
         _ctx: &foxhole::RequestState,
         _captures: &mut foxhole::Captures,
-    ) -> std::result::Result<
-        Fallible,
-        std::boxed::Box<(dyn foxhole::error::IntoResponseError + 'static)>,
-    > {
+    ) -> FoxholeResult<Fallible> {
         Err(Box::new(foxhole::error::Error::NotFound))
     }
 }

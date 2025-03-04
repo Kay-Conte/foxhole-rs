@@ -5,7 +5,7 @@ use crate::{
     error::{Error, IntoResponseError},
     routing::Captures,
     type_cache::TypeCacheKey,
-    RequestState,
+    FoxholeResult, RequestState,
 };
 
 /// `Resolve` is a trait used to construct values needed to call a given `System`. All parameters
@@ -16,7 +16,7 @@ pub trait Resolve: Sized {
     fn resolve<'a>(
         ctx: &'a RequestState,
         captures: &mut Captures,
-    ) -> Result<Self::Output<'a>, Box<dyn IntoResponseError>>;
+    ) -> FoxholeResult<Self::Output<'a>>;
 }
 
 /// `ResolveGuard` is the expected return type of top level `Resolve`able objects. Only types that

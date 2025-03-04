@@ -1,7 +1,7 @@
 use foxhole::{
     action::{Html, RawResponse},
     error::Error,
-    App, Http1, IntoResponse,
+    App, FoxholeResult, Http1, IntoResponse,
     Method::Get,
     Resolve, Router,
 };
@@ -30,13 +30,10 @@ struct Fallible;
 impl Resolve for Fallible {
     type Output<'a> = Fallible;
 
-    fn resolve<'a>(
-        _ctx: &'a foxhole::RequestState,
+    fn resolve(
+        _ctx: &foxhole::RequestState,
         _captures: &mut foxhole::Captures,
-    ) -> std::result::Result<
-        Fallible,
-        std::boxed::Box<(dyn foxhole::error::IntoResponseError + 'static)>,
-    > {
+    ) -> FoxholeResult<Fallible> {
         Err(Box::new(CustomErr::Bar))
     }
 }

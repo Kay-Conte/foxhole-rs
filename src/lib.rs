@@ -1,6 +1,8 @@
 #![allow(clippy::new_without_default)]
 #![doc = include_str!("../README.md")]
 
+pub type FoxholeResult<T> = Result<T, Box<dyn crate::error::IntoResponseError>>;
+
 mod handler;
 mod lazy;
 mod sequential_writer;
