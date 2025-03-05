@@ -7,7 +7,7 @@ use crate::{
     action::IntoAction,
     connection::BoxedStream,
     error::{Error, IntoResponseError},
-    Action, IntoResponse, Request, Resolve, Response,
+    Action, IntoResponse, Request, RequestState, Resolve, Response,
 };
 
 const GUID: &str = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
@@ -63,7 +63,7 @@ pub struct Upgrade;
 
 impl Upgrade {
     /// Convert this type to a `Websocket`. Return the `Websocket` from a system to handle the connection
-    pub fn handle(&self, f: fn(WebsocketConnection)) -> Websocket {
+    pub fn handle(&self, f: fn(WebsocketConnection, &RequestState)) -> Websocket {
         Websocket(f)
     }
 }
@@ -92,13 +92,13 @@ impl Resolve for Upgrade {
     }
 }
 
-pub struct Websocket(fn(WebsocketConnection));
+pub struct Websocket(fn(WebsocketConnection, &RequestState));
 
 impl IntoAction for Websocket {
     fn action(self) -> crate::Action {
         Action::Upgrade(
             respond_handshake,
-            Box::new(move |stream| (self.0)(WebsocketConnection::new(stream))),
+            Box::new(move |stream, ctx| (self.0)(WebsocketConnection::new(stream), ctx)),
         )
     }
 }

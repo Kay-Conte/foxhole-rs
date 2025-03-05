@@ -12,7 +12,7 @@ fn upgrade(upgrade: Upgrade) -> Websocket {
 
     println!("Running");
 
-    upgrade.handle(|mut ws| loop {
+    upgrade.handle(|mut ws, _ctx| loop {
         match ws.next_frame() {
             Ok(v) => {
                 let _ = ws.send(v);

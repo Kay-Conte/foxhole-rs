@@ -3,6 +3,7 @@ use http::{Response, Version};
 use crate::{
     error::{Error, IntoResponseError},
     http_utils::IntoRawBytes,
+    RequestState,
 };
 
 #[cfg(feature = "websocket")]
@@ -23,7 +24,10 @@ pub enum Action {
     #[cfg(feature = "websocket")]
     /// Upgrade the connection to a websocket with a custom handler. Unless implementing a specific
     /// websocket version or protocol negotiation, you probably want to use `foxhole::websocket::Upgrade` instead.
-    Upgrade(fn(&Request) -> crate::Response, Box<dyn Fn(BoxedStream)>),
+    Upgrade(
+        fn(&Request) -> crate::Response,
+        Box<dyn Fn(BoxedStream, &RequestState)>,
+    ),
 
     Err(Box<dyn IntoResponseError>),
 }

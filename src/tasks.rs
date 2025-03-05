@@ -320,7 +320,7 @@ where
                 let response = r(&ctx.request);
                 let _ = self.responder.respond(response);
 
-                f(connection.upgrade());
+                f(connection.upgrade(), &ctx);
             }
             Action::Err(e) => {
                 let response = match self.router.get_handler(&std::any::Any::type_id(e.as_ref())) {
