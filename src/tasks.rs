@@ -279,13 +279,12 @@ where
         let Some((handler, captures)) = self.router.route(path) else {
             let e = Error::NotFound;
 
-            let Some(handler) = self.router.get_handler(&e.type_id()) else {
-                unimplemented!()
+            let response = match self.router.get_handler(&e.type_id()) {
+                Some(handler) => handler.handle(Box::new(e)),
+                None => e.response(),
             };
 
-            let res = handler.handle(Box::new(e));
-
-            let _ = self.responder.respond(res);
+            let _ = self.responder.respond(response);
 
             return;
         };
@@ -293,13 +292,12 @@ where
         let Some(system) = handler.get(ctx.request.method()) else {
             let e = Error::NotFound;
 
-            let Some(handler) = self.router.get_handler(&e.type_id()) else {
-                unimplemented!()
+            let response = match self.router.get_handler(&e.type_id()) {
+                Some(handler) => handler.handle(Box::new(e)),
+                None => e.response(),
             };
 
-            let res = handler.handle(Box::new(e));
-
-            let _ = self.responder.respond(res);
+            let _ = self.responder.respond(response);
 
             return;
         };

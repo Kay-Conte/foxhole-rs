@@ -1,4 +1,4 @@
-use std::sync::{Arc, RwLock};
+use std::sync::RwLock;
 
 use foxhole::{
     action::Html, resolve::Query, App, Http1, Method::Get, Router, TypeCache, TypeCacheKey,
@@ -9,7 +9,7 @@ pub struct Counter(u32);
 impl TypeCacheKey for Counter {
     // This must be an `Arc` otherwise the object will be cloned by `Query` and changes will
     // not persist
-    type Value = Arc<RwLock<Counter>>;
+    type Value = RwLock<Counter>;
 }
 
 // The value stored inside `Query` is `Counter::Value`
@@ -29,7 +29,7 @@ fn main() {
 
     let mut cache = TypeCache::new();
 
-    cache.insert::<Counter>(Arc::new(RwLock::new(Counter(0))));
+    cache.insert::<Counter>(RwLock::new(Counter(0)));
 
     println!("Try connecting with a browser at 'http://localhost:8080'");
 
