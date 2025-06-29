@@ -77,7 +77,7 @@ The following is basic implementation of `Token` getter.
 
 ### Example
 ```rust
-use foxhole::{Resolve, ResolveGuard, RequestState, Captures};
+use foxhole::{error::Error, Resolve, ResolveGuard, RequestState, Captures, FoxholeResult};
 
 struct Token(String);
 
@@ -87,13 +87,13 @@ impl Resolve for Token {
     fn resolve(
         ctx: &RequestState,
         _captures: &mut Captures,
-    ) -> ResolveGuard<Self> {
+    ) -> FoxholeResult<Self> {
         let Some(v) = ctx.request.headers().get("authorization") else {
-            return ResolveGuard::None;
+            return Err(Box::new(Error::NotAuthorized));
         };
 
         // You should handle the `Err` case in real code
-        ResolveGuard::Value(Token(v.to_str().unwrap().to_string()))
+        Ok(Token(v.to_str().unwrap().to_string()))
     }
 }
 
