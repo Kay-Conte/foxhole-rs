@@ -16,13 +16,13 @@ date = ["chrono"]
 websocket = ["sha1", "base64"]
 
 [dependencies]
-http = "1.3.1"
-rustls = { version = "0.23.2", optional = true }
+http = "1.4.0"
+rustls = { version = "0.23.36", optional = true }
 
-chrono = { version = "0.4.35", optional = true }
+chrono = { version = "0.4.43", optional = true }
 
 sha1 = { version = "0.10.6", optional = true }
-base64 = { version = "0.22.0", optional = true }
+base64 = { version = "0.22.1", optional = true }
 
 [dev-dependencies]
 rustls-pemfile = "2"
